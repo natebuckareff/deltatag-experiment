@@ -23,6 +23,39 @@ function generateIslandId(
   return `island-${hash}`;
 }
 
+function normalizeToProjectPath(
+  importPath: string,
+  currentFileId: string,
+): string {
+  // If already normalized or an alias, return as-is
+  if (!importPath.startsWith('.')) {
+    return importPath;
+  }
+
+  // Resolve to absolute path
+  const currentDir = path.dirname(currentFileId);
+  const absolutePath = path.resolve(currentDir, importPath);
+
+  // Find project root by looking for src/ in the path
+  const pathParts = absolutePath.split(path.sep);
+  const srcIndex = pathParts.indexOf('src');
+
+  if (srcIndex === -1) {
+    console.warn('[island-meta] Could not find src/ in path:', absolutePath);
+    return importPath; // Fallback to original
+  }
+
+  // Get path from src/ onwards
+  const fromSrc = pathParts.slice(srcIndex).join('/'); // Always use forward slashes
+
+  // Add .tsx if not present (handles import path → file path)
+  if (!fromSrc.endsWith('.tsx') && !fromSrc.endsWith('.ts')) {
+    return fromSrc + '.tsx';
+  }
+
+  return fromSrc;
+}
+
 export function islandMetaPlugin(): Plugin {
   return {
     name: 'island-meta',
@@ -44,16 +77,8 @@ export function islandMetaPlugin(): Plugin {
       for (const match of code.matchAll(importRegex)) {
         const [, named, defaultImport, source] = match;
 
-        // Resolve relative imports
-        let resolvedSource = source;
-        if (source.startsWith('.')) {
-          const currentDir = path.dirname(id);
-          const absolutePath = path.resolve(currentDir, source);
-          const srcIndex = absolutePath.indexOf('/src/');
-          if (srcIndex !== -1) {
-            resolvedSource = absolutePath.slice(srcIndex + 1);
-          }
-        }
+        // Normalize the path
+        const normalizedPath = normalizeToProjectPath(source, id);
 
         if (named) {
           const names = named.split(',').map(s => s.trim());
@@ -62,12 +87,12 @@ export function islandMetaPlugin(): Plugin {
             const exportName = parts[0].trim();
             const localName =
               parts.length > 1 ? parts[1].trim() : parts[0].trim();
-            imports.set(localName, { file: resolvedSource, exportName });
+            imports.set(localName, { file: normalizedPath, exportName });
           }
         }
         if (defaultImport) {
           imports.set(defaultImport, {
-            file: resolvedSource,
+            file: normalizedPath,
             exportName: 'default',
           });
         }
@@ -80,18 +105,10 @@ export function islandMetaPlugin(): Plugin {
       for (const match of code.matchAll(namespaceRegex)) {
         const [, namespaceName, source] = match;
 
-        // Resolve relative imports
-        let resolvedSource = source;
-        if (source.startsWith('.')) {
-          const currentDir = path.dirname(id);
-          const absolutePath = path.resolve(currentDir, source);
-          const srcIndex = absolutePath.indexOf('/src/');
-          if (srcIndex !== -1) {
-            resolvedSource = absolutePath.slice(srcIndex + 1);
-          }
-        }
+        // Normalize the path
+        const normalizedPath = normalizeToProjectPath(source, id);
 
-        namespaces.set(namespaceName, resolvedSource);
+        namespaces.set(namespaceName, normalizedPath);
       }
 
       // Find both simple and member expression islands:
