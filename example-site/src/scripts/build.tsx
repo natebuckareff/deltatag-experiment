@@ -28,12 +28,14 @@ export interface BuildOptions {
 
 interface Route {
   path?: string;
-  file?: string;
+  layout?: string;
+  index?: string;
+  entry?: string;
   children?: Route[];
 }
 
 interface RouteIndex {
-  file: string;
+  layout: string;
 }
 
 interface TemplateManifest {
@@ -57,25 +59,25 @@ export function build({ pages, projectRoot, outDir }: BuildOptions) {
       throw Error('route path is undefined');
     }
 
-    const index = getRouteIndex(route);
+    const index = route.index;
     if (!index) {
       throw Error('route index not found');
     }
 
     const layoutPages: PageSource[] = [];
     for (const ancestor of ancestors) {
-      if (ancestor.file) {
-        layoutPages.push(pagesByFile[ancestor.file]);
+      if (ancestor.layout) {
+        layoutPages.push(pagesByFile[ancestor.layout]);
       }
     }
 
-    if (route.file) {
-      layoutPages.push(pagesByFile[route.file]);
+    if (route.layout) {
+      layoutPages.push(pagesByFile[route.layout]);
     }
 
     resetIslandRegistry();
 
-    const indexPage = pagesByFile[index.file];
+    const indexPage = pagesByFile[index];
     const Component = getComposedComponents(layoutPages, indexPage);
     const html = renderDocument(Component);
     const outPath = getTemplateOutPath(outDir, ancestors, route);
@@ -99,11 +101,7 @@ export function build({ pages, projectRoot, outDir }: BuildOptions) {
         clientEntryPath,
       );
 
-      const fullPath = getRouteFullPath(ancestors, route).join('/');
-
-      manifest[fullPath] = {
-        entry: path.basename(clientEntryPath),
-      };
+      route.entry = path.basename(clientEntryPath);
 
       console.log(`  • generated ${relativeClientEntryPath}`);
 
@@ -116,9 +114,6 @@ export function build({ pages, projectRoot, outDir }: BuildOptions) {
 
     if (route.children) {
       for (const child of route.children) {
-        if (isIndexRoute(child)) {
-          continue;
-        }
         walk([...ancestors, route], child);
       }
     }
@@ -126,8 +121,8 @@ export function build({ pages, projectRoot, outDir }: BuildOptions) {
 
   walk([], routes);
 
-  const manifestJson = JSON.stringify(manifest, null, 2);
-  fs.writeFileSync(path.join(outDir, 'templates/manifest.json'), manifestJson);
+  const routesJson = JSON.stringify(routes, null, 2);
+  fs.writeFileSync(path.join(outDir, 'routes.json'), routesJson);
 }
 
 function getTemplateOutPath(
@@ -194,7 +189,8 @@ function createRoutes(sources: PageSource[]): Route {
 
   const root: Route = {
     path: '/',
-    file: undefined,
+    layout: undefined,
+    index: undefined,
     children: [],
   };
 
@@ -218,29 +214,24 @@ function createRoutes(sources: PageSource[]): Route {
         continue;
       }
 
-      const newChild: Route = { path: key, file: undefined };
+      const newChild: Route = {
+        path: key,
+        layout: undefined,
+        index: undefined,
+      };
       node.children ??= [];
       node.children.push(newChild);
       node = newChild;
     }
 
     if (page.layout) {
-      node.file = entry.source.file;
+      node.layout = entry.source.file;
     } else {
-      node.children ??= [];
-      node.children.unshift({ file: entry.source.file });
+      node.index = entry.source.file;
     }
   }
 
   return root;
-}
-
-function getRouteIndex(route: Route): RouteIndex | undefined {
-  return route.children?.find(route => isIndexRoute(route));
-}
-
-function isIndexRoute(route: Route): route is RouteIndex {
-  return route.path === undefined;
 }
 
 function generateClientEntry(
