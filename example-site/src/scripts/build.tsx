@@ -26,22 +26,12 @@ export interface BuildOptions {
   outDir: string;
 }
 
-interface Route {
+interface RawRoute {
   path?: string;
   layout?: string;
   index?: string;
   entry?: string;
-  children?: Route[];
-}
-
-interface RouteIndex {
-  layout: string;
-}
-
-interface TemplateManifest {
-  [path: string]: {
-    entry: string;
-  };
+  children?: RawRoute[];
 }
 
 export function build({ pages, projectRoot, outDir }: BuildOptions) {
@@ -52,9 +42,7 @@ export function build({ pages, projectRoot, outDir }: BuildOptions) {
     pagesByFile[page.file] = page;
   }
 
-  const manifest: TemplateManifest = {};
-
-  const walk = (ancestors: Route[], route: Route) => {
+  const walk = (ancestors: RawRoute[], route: RawRoute) => {
     if (route.path === undefined) {
       throw Error('route path is undefined');
     }
@@ -127,8 +115,8 @@ export function build({ pages, projectRoot, outDir }: BuildOptions) {
 
 function getTemplateOutPath(
   outDir: string,
-  ancestors: Route[],
-  route: Route,
+  ancestors: RawRoute[],
+  route: RawRoute,
 ): string {
   const fullPath = getRouteFullPath(ancestors, route);
 
@@ -143,7 +131,7 @@ function getTemplateOutPath(
   }
 }
 
-function getRouteFullPath(ancestors: Route[], route: Route): string[] {
+function getRouteFullPath(ancestors: RawRoute[], route: RawRoute): string[] {
   return [...ancestors.map(a => a.path), route.path]
     .map(p => p?.replace(/^\//, ''))
     .filter((s): s is string => Boolean(s));
@@ -176,7 +164,7 @@ function renderDocument(Component: () => JSX.Element) {
   return `<!doctype html>${renderToString(Component)}`;
 }
 
-function createRoutes(sources: PageSource[]): Route {
+function createRoutes(sources: PageSource[]): RawRoute {
   interface Entry {
     segments: string[];
     source: PageSource;
@@ -187,10 +175,11 @@ function createRoutes(sources: PageSource[]): Route {
     source,
   }));
 
-  const root: Route = {
+  const root: RawRoute = {
     path: '/',
     layout: undefined,
     index: undefined,
+    entry: undefined,
     children: [],
   };
 
@@ -201,7 +190,7 @@ function createRoutes(sources: PageSource[]): Route {
       .filter(Boolean)
       .map(s => `/${s}`);
 
-    let node = root as Route;
+    let node = root;
     while (true) {
       const key = segments.shift();
       if (!key) {
@@ -214,10 +203,11 @@ function createRoutes(sources: PageSource[]): Route {
         continue;
       }
 
-      const newChild: Route = {
+      const newChild: RawRoute = {
         path: key,
         layout: undefined,
         index: undefined,
+        entry: undefined,
       };
       node.children ??= [];
       node.children.push(newChild);
