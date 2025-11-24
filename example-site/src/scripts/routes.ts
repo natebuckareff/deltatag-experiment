@@ -11,11 +11,15 @@ export interface NodeRoute {
 export interface LeafRoute {
   path: `/${string}`;
   index: string;
-  entry: string;
+  entry?: string;
+}
+
+export function isNodeRoute(route: Route): route is NodeRoute {
+  return 'children' in route;
 }
 
 export function isLeafRoute(route: Route): route is LeafRoute {
-  return 'entry' in route;
+  return !isNodeRoute(route);
 }
 
 export function findMatchingRoute(
