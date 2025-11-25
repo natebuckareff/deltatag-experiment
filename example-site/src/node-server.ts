@@ -1,86 +1,12 @@
-import assert from 'node:assert';
 import fs from 'node:fs';
 import { createSecureServer } from 'node:http2';
 import path from 'node:path';
-import {
-  getEntryName,
-  getTemplateName,
-  ProjectDirectory,
-} from './scripts/project-directory.ts';
-import { findMatchingRoute } from './scripts/routes.ts';
+import type { Manifest } from './scripts/manifest.ts';
+import { findMatchingRoute } from './scripts/manifest.ts';
 
 interface Config {
   buildDir: string;
   outputDir: string;
-}
-
-type ViteManifest = Record<string, ViteManifestChunk>;
-
-interface ViteManifestChunk {
-  src?: string;
-  file: string;
-  css?: string[];
-  assets?: string[];
-  isEntry?: boolean;
-  name?: string;
-  isDynamicEntry?: boolean;
-  imports?: string[];
-  dynamicImports?: string[];
-}
-
-function readServerManifest(config: Config): ViteManifest {
-  const manifestPath = path.join(
-    config.buildDir,
-    'ssr',
-    '.vite',
-    'manifest.json',
-  );
-  return JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-}
-
-function readClientManifest(config: Config): ViteManifest {
-  const manifestPath = path.join(
-    config.outputDir,
-    'client',
-    '.vite',
-    'manifest.json',
-  );
-  return JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-}
-
-function getChunks(manifest: ViteManifest, name: string): ViteManifestChunk[] {
-  const seen = new Set<string>([name]);
-
-  const getChunks = (chunk: ViteManifestChunk): ViteManifestChunk[] => {
-    const chunks: ViteManifestChunk[] = [];
-
-    if (chunk.imports) {
-      for (const file of chunk.imports) {
-        if (seen.has(file)) {
-          continue;
-        }
-        seen.add(file);
-
-        const importee = manifest[file];
-        if (!importee) {
-          throw new Error(`manifest key not found`);
-        }
-
-        chunks.push(...getChunks(importee));
-        chunks.push(importee);
-      }
-    }
-
-    return chunks;
-  };
-
-  const chunk = manifest[name];
-
-  if (!chunk) {
-    throw new Error(`manifest key not found`);
-  }
-
-  return [chunk, ...getChunks(chunk)];
 }
 
 function createLink(type: string, href: string): string {
@@ -101,10 +27,9 @@ const cert = fs.readFileSync('localhost-cert.pem');
 
 const server = createSecureServer({ key, cert });
 
-const projectDir = ProjectDirectory.fromCwd();
-const routes = projectDir.readRoutes();
-const serverManifest = readServerManifest(config);
-const clientManifest = readClientManifest(config);
+const manifest: Manifest = JSON.parse(
+  fs.readFileSync(path.join(config.outputDir, 'manifest.json'), 'utf-8'),
+);
 
 server.on('stream', async (stream, headers) => {
   try {
@@ -126,9 +51,9 @@ server.on('stream', async (stream, headers) => {
 
       // TODO: very gross and hacky, can do better with static asset path mappings
       let assetPath = path.join(config.outputDir, 'client', asset);
-      if (!fs.existsSync(assetPath)) {
-        assetPath = path.join(config.buildDir, 'ssr', asset);
-      }
+      // if (!fs.existsSync(assetPath)) {
+      //   assetPath = path.join(config.buildDir, 'ssr', asset);
+      // }
 
       const assetExt = path.extname(assetPath);
       const contentTypes: Record<string, string> = {
@@ -150,9 +75,10 @@ server.on('stream', async (stream, headers) => {
       return;
     }
 
-    const [ancestors, route] = findMatchingRoute(routes, requestUrl);
+    const [, route] = findMatchingRoute(manifest.routes, requestUrl);
+    const template = route ? manifest.templates[route.template] : undefined;
 
-    if (!route) {
+    if (!route || !template) {
       stream.respond({
         'content-type': 'text/plain',
         ':status': '404',
@@ -161,42 +87,24 @@ server.on('stream', async (stream, headers) => {
       return;
     }
 
-    const templateName = getTemplateName({ ancestors, route });
-    const entryName = getEntryName({ ancestors, route });
-
-    const clientEntry = `.build/client/${entryName}.tsx`;
-    const serverEntry = `.build/server/${entryName}.tsx`;
-
-    const clientChunks = getChunks(clientManifest, clientEntry);
-    const serverChunks = getChunks(serverManifest, serverEntry);
-
-    assert(clientChunks[0]?.isEntry);
-    assert(serverChunks[0]?.isEntry);
-
-    // <link rel="stylesheet" href="{file}" />
-    const cssImported = Array.from(
-      new Set([
-        ...clientChunks.flatMap(chunk => chunk.css ?? []),
-        ...serverChunks.flatMap(chunk => chunk.css ?? []),
-      ]),
-    );
-
-    const jsEntry = clientChunks[0].file;
-    const jsImported = clientChunks.slice(1).flatMap(chunk => chunk.file);
-
     const links: string[] = [];
     const scripts: string[] = [];
     const linkHeaders: string[] = [];
 
-    links.push(...cssImported.map(file => createLink('stylesheet', file)));
-    links.push(...jsImported.map(file => createLink('modulepreload', file)));
-    scripts.push(createScript(jsEntry));
+    links.push(...template.css.map(file => createLink('stylesheet', file)));
+    links.push(
+      ...template.jsImports.map(file => createLink('modulepreload', file)),
+    );
 
-    for (const file of cssImported) {
+    if (template.jsEntry) {
+      scripts.push(createScript(template.jsEntry));
+    }
+
+    for (const file of template.css) {
       linkHeaders.push(`</assets/${file}>; rel="preload"; as="style"`);
     }
 
-    for (const file of jsImported) {
+    for (const file of template.jsImports) {
       linkHeaders.push(`</assets/${file}>; rel="modulepreload"; as="script"`);
     }
 
@@ -208,20 +116,20 @@ server.on('stream', async (stream, headers) => {
     // simulate slow html rendering to test early hints
     await new Promise(r => setTimeout(r, 1000));
 
-    let template = fs.readFileSync(
-      path.join(config.outputDir, 'templates', templateName + '.html'),
+    let html = fs.readFileSync(
+      path.join(config.outputDir, 'templates', route.template),
       'utf-8',
     );
 
-    template = template.replace('{{links}}', links.join('\n'));
-    template = template.replace('{{scripts}}', scripts.join('\n'));
+    html = html.replace('{{links}}', links.join('\n'));
+    html = html.replace('{{scripts}}', scripts.join('\n'));
 
     stream.respond({
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'public, max-age=3600',
       ':status': 200,
     });
-    stream.end(template);
+    stream.end(html);
   } catch (error) {
     console.error(error);
   }
