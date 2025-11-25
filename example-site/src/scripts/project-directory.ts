@@ -53,7 +53,7 @@ export class ProjectDirectory {
   getClientEntryPath(routePath: RoutePath): string {
     const name = getEntryName(routePath);
     const filename = name + '.tsx';
-    return path.join(this.getOutputDir(), 'client', filename);
+    return path.join(this.getBuildDir(), 'client', filename);
   }
 
   getBuldScriptImportPath(): string {
