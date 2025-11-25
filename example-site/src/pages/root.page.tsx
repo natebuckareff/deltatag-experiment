@@ -1,6 +1,7 @@
 import type { JSX } from 'solid-js';
 import { HydrationScript } from 'solid-js/web';
 import type { PageConfig } from '../scripts/build';
+import { createVar } from '../tera';
 
 export const page: PageConfig = {
   path: '/',
@@ -8,12 +9,15 @@ export const page: PageConfig = {
 };
 
 export default function Root(props: { children: JSX.Element }) {
+  const ctx = createVar<{ links: string; scripts: string }>();
+
   return (
     <html lang="en">
       <head>
         <title>Root Layout</title>
+        <HydrationScript />
+        {ctx.links}
       </head>
-
       <body>
         <div>
           <p>root layout</p>
@@ -30,8 +34,7 @@ export default function Root(props: { children: JSX.Element }) {
           </ul>
           <div>{props.children}</div>
         </div>
-
-        <HydrationScript />
+        {ctx.scripts}
       </body>
     </html>
   );

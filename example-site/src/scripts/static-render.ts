@@ -9,5 +9,5 @@ const entryFiles = glob.sync(path.join(projectRoot, '.build/ssr/entry-*.js'));
 for (const entryFile of entryFiles) {
   const url = pathToFileURL(entryFile).href;
   await import(url);
-  console.log(`✓ Rendered ${entryFile}`);
+  console.log(`✓ rendered ${entryFile}`);
 }

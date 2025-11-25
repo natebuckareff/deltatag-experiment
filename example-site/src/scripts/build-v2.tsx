@@ -2,8 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSX } from 'solid-js';
 import { NoHydration, renderToString } from 'solid-js/web';
-import { IslandEntry, readIslandRegistry } from '../lib/island';
-import { findProjectRoot, getRouteEntryName } from './lib';
+import {
+  IslandEntry,
+  readIslandRegistry,
+  resetIslandRegistry,
+} from '../lib/island';
+import {
+  findProjectRoot,
+  getRouteEntryName,
+  getRouteTemplateName,
+} from './lib';
 import { NodeRoute, Route } from './routes';
 
 interface RenderParams {
@@ -19,14 +27,16 @@ interface PageModule {
 }
 
 export function renderPage(params: RenderParams) {
+  resetIslandRegistry();
+
   const projectRoot = findProjectRoot();
   const outDir = path.join(projectRoot, '.output');
   const route = params.route;
 
   const Component = getComposedComponents(params.layouts, params.page);
   const html = renderDocument(Component);
-  const pagename = getRouteEntryName(params.ancestors, route);
-  const outFile = pagename + '.html';
+  const templateName = getRouteTemplateName(params.ancestors, route);
+  const outFile = templateName + '.html';
   const outPath = path.join(outDir, 'templates', outFile);
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
@@ -37,14 +47,13 @@ export function renderPage(params: RenderParams) {
 
   if (islandRegistry.length > 0) {
     const clientEntryPath = generateClientEntry(
+      params.ancestors,
+      route,
       projectRoot,
-      pagename,
       islandRegistry,
     );
 
     const relativeClientEntryPath = path.relative(projectRoot, clientEntryPath);
-
-    route.entry = path.basename(clientEntryPath);
 
     console.log(`  • generated ${relativeClientEntryPath}`);
 
@@ -81,15 +90,21 @@ function renderDocument(Component: () => JSX.Element) {
 }
 
 function generateClientEntry(
+  ancestors: NodeRoute[],
+  route: Route,
   projectRoot: string,
-  pagename: string,
   islandRegistry: [string, IslandEntry][],
 ): string {
   const imports: string[] = [];
   const hydrations: string[] = [];
 
+  imports.push(`/* @refresh reload */`);
+  imports.push(`import { hydrate } from 'solid-js/web';`);
+  imports.push(`import 'solid-devtools';`);
+
+  const entryName = getRouteEntryName(ancestors, route);
   const clientEntryDir = path.join(projectRoot, '.build/client');
-  const clientEntryPath = path.join(clientEntryDir, `entry-${pagename}.tsx`);
+  const clientEntryPath = path.join(clientEntryDir, `${entryName}.tsx`);
 
   for (const [file, meta] of islandRegistry) {
     const componentAbsPath = path.join(projectRoot, file);

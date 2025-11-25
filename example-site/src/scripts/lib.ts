@@ -22,13 +22,25 @@ export function readConfigRoutes(): NodeRoute {
   return JSON.parse(fs.readFileSync(routesPath, 'utf-8'));
 }
 
+export function getRouteKebab(ancestors: NodeRoute[], route: Route): string {
+  return [...ancestors.map(a => a.path), route.path]
+    .map(p => p.slice(1))
+    .filter(Boolean)
+    .join('-');
+}
+
 export function getRouteEntryName(
   ancestors: NodeRoute[],
   route: Route,
 ): string {
-  const allPaths = [...ancestors.map(a => a.path), route.path]
-    .map(p => p.slice(1))
-    .filter(Boolean);
+  const routeKebab = getRouteKebab(ancestors, route);
+  return `entry-${routeKebab || 'index'}`;
+}
 
-  return `entry-${allPaths.join('-') || 'index'}`;
+export function getRouteTemplateName(
+  ancestors: NodeRoute[],
+  route: Route,
+): string {
+  const routeKebab = getRouteKebab(ancestors, route);
+  return routeKebab || 'index';
 }

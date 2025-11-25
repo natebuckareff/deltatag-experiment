@@ -4,14 +4,12 @@ export interface NodeRoute {
   path: `/${string}`;
   layout?: string;
   index: string;
-  entry?: string;
   children: Route[];
 }
 
 export interface LeafRoute {
   path: `/${string}`;
   index: string;
-  entry?: string;
 }
 
 export function isNodeRoute(route: Route): route is NodeRoute {
@@ -25,32 +23,35 @@ export function isLeafRoute(route: Route): route is LeafRoute {
 export function findMatchingRoute(
   route: NodeRoute,
   pathname: string,
-): Route | undefined {
+): [NodeRoute[], Route | undefined] {
   const paths = pathname.split('/').filter(Boolean);
 
   let current: NodeRoute = route;
+  const ancestors: NodeRoute[] = [];
 
   while (true) {
     const path = paths.shift();
 
     if (!path) {
-      return current;
+      return [ancestors, current];
     }
 
     const child = current.children.find(c => c.path.slice(1) === path);
 
     if (!child) {
-      return;
+      return [ancestors, undefined];
     }
 
     if (isLeafRoute(child)) {
       if (paths.length > 0) {
-        return;
+        return [ancestors, undefined];
       } else {
-        return child;
+        ancestors.push(current);
+        return [ancestors, child];
       }
     }
 
+    ancestors.push(current);
     current = child;
   }
 }

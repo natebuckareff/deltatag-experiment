@@ -45,7 +45,10 @@ function generateServerEntries(route: NodeRoute) {
       `import { renderPage } from ${JSON.stringify(buildImportPath)};`,
     );
 
-    const layouts = ancestors.filter(isNodeRoute).map(r => r.layout);
+    const layouts = [route, ...ancestors]
+      .filter(isNodeRoute)
+      .map(r => r.layout);
+
     const layoutsArray: string[] = [];
 
     for (let i = 0; i < layouts.length; i++) {

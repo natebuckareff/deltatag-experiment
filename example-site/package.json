@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "tsx src/dev-server.ts",
+    "start": "node --watch src/node-server.ts",
     "build:server": "vite build --mode server",
     "build:client": "vite build --mode client"
   },

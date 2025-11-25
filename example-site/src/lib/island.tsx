@@ -38,8 +38,8 @@ export function Island(props: IslandProps) {
   const entry = { ...internalProps.__meta, id: props.id };
   islandRegistry.set(internalProps.__meta.file, entry);
   return (
-    <Hydration>
-      <div id={props.id}>{props.children}</div>
-    </Hydration>
+    <div id={props.id}>
+      <Hydration>{props.children}</Hydration>
+    </div>
   );
 }

@@ -10,10 +10,13 @@ export default defineConfig(({ mode }) => {
       plugins: [islandMetaPlugin(), devtools(), solidPlugin({ ssr: true })],
       build: {
         ssr: true,
+        manifest: true,
+        ssrEmitAssets: true,
         target: 'esnext',
+        assetsDir: '',
         outDir: '.build/ssr',
         rollupOptions: {
-          input: '.build/entry-server.tsx',
+          input: glob.sync('.build/server/entry-*.tsx'),
         },
       },
       ssr: {

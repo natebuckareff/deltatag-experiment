@@ -1,0 +1,26 @@
+{
+  "path": "/",
+  "layout": "src/pages/root.page.tsx",
+  "index": "src/pages/landing.page.tsx",
+  "children": [
+    {
+      "path": "/login",
+      "index": "src/pages/login.page.tsx"
+    },
+    {
+      "path": "/dashboard",
+      "layout": "src/pages/dash/dashboard-wrapper.page.tsx",
+      "index": "src/pages/dash/dashboard.page.tsx",
+      "children": [
+        {
+          "path": "/users",
+          "index": "src/pages/dash/dashboard-users.page.tsx"
+        },
+        {
+          "path": "/events",
+          "index": "src/pages/dash/dashboard-events.page.tsx"
+        }
+      ]
+    }
+  ]
+}
