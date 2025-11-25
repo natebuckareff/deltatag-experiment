@@ -172,12 +172,13 @@ server.on('stream', async (stream, headers) => {
     assert(clientChunks[0]?.isEntry);
     assert(serverChunks[0]?.isEntry);
 
-    // TODO: make unique
     // <link rel="stylesheet" href="{file}" />
-    const cssImported = [
-      ...clientChunks.flatMap(chunk => chunk.css ?? []),
-      ...serverChunks.flatMap(chunk => chunk.css ?? []),
-    ];
+    const cssImported = Array.from(
+      new Set([
+        ...clientChunks.flatMap(chunk => chunk.css ?? []),
+        ...serverChunks.flatMap(chunk => chunk.css ?? []),
+      ]),
+    );
 
     const jsEntry = clientChunks[0].file;
     const jsImported = clientChunks.slice(1).flatMap(chunk => chunk.file);
