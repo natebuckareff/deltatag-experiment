@@ -8,6 +8,7 @@ export default function LandingPage() {
   return (
     <div>
       <div>landing page {ctx.username}</div>
+      <h1 class="text-3xl font-bold underline text-red-500">Hello world!</h1>
       <Island>
         <Counter />
       </Island>

@@ -9,7 +9,10 @@
     "build:client": "vite build --mode client"
   },
   "dependencies": {
-    "solid-js": "^1.9.10"
+    "@tailwindcss/postcss": "^4.1.17",
+    "postcss": "^8.5.6",
+    "solid-js": "^1.9.10",
+    "tailwindcss": "^4.1.17"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.6",
