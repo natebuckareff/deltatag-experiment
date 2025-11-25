@@ -12,6 +12,11 @@ export interface LeafRoute {
   index: string;
 }
 
+export interface RoutePath {
+  ancestors: NodeRoute[];
+  route: Route;
+}
+
 export function isNodeRoute(route: Route): route is NodeRoute {
   return 'children' in route;
 }

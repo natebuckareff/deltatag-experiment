@@ -1,14 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { findProjectRoot, getRouteEntryName, readConfigRoutes } from './lib.ts';
+import { getEntryName, ProjectDirectory } from './project-directory.ts';
 import { isNodeRoute, type NodeRoute, type Route } from './routes.ts';
 
-const buildDir = '.build';
-const serverEntriesDir = path.join(buildDir, 'server');
+const projectDir = ProjectDirectory.fromCwd();
+const buildDir = projectDir.getBuildDir();
+const serverEntriesDir = projectDir.getServerEntriesDir();
 
 function generateServerEntries(route: NodeRoute) {
-  const root = findProjectRoot();
-
   const walk = (ancestors: NodeRoute[], route: Route) => {
     // output example:
     /*
@@ -37,10 +36,7 @@ function generateServerEntries(route: NodeRoute) {
     imports.push('');
 
     // TODO: this file will eventually live in node_modules or something
-    const buildImportPath = path.relative(
-      serverEntriesDir,
-      path.join(root, 'src/scripts/build.tsx'),
-    );
+    const buildImportPath = projectDir.getBuldScriptImportPath();
     imports.push(
       `import { renderPage } from ${JSON.stringify(buildImportPath)};`,
     );
@@ -73,9 +69,10 @@ function generateServerEntries(route: NodeRoute) {
     const runner: string[] = [];
 
     runner.push(`renderPage({`);
-    runner.push(`  ancestors: ${JSON.stringify(ancestors)},`);
-    runner.push(`  route: ${JSON.stringify(route)},`);
-    runner.push(`  path: ${JSON.stringify(fullPath)},`);
+    runner.push(`  path: {`);
+    runner.push(`    ancestors: ${JSON.stringify(ancestors)},`);
+    runner.push(`    route: ${JSON.stringify(route)}`);
+    runner.push(`  },`);
 
     if (layoutsArray.length === 0) {
       runner.push(`  layouts: [],`);
@@ -90,7 +87,7 @@ function generateServerEntries(route: NodeRoute) {
     runner.push(`});`);
 
     const code = imports.join('\n') + '\n\n' + runner.join('\n') + '\n';
-    const entryName = getRouteEntryName(ancestors, route);
+    const entryName = getEntryName({ ancestors, route });
     const entryPath = path.join(serverEntriesDir, `${entryName}.tsx`);
 
     fs.mkdirSync(path.dirname(entryPath), { recursive: true });
@@ -106,6 +103,6 @@ function generateServerEntries(route: NodeRoute) {
   walk([], route);
 }
 
-const routes = readConfigRoutes();
+const routes = projectDir.readRoutes();
 
 generateServerEntries(routes);

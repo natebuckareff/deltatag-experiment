@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import { createSecureServer } from 'node:http2';
 import path from 'node:path';
 import {
-  getRouteEntryName,
-  getRouteTemplateName,
-  readConfigRoutes,
-} from './scripts/lib.ts';
+  getEntryName,
+  getTemplateName,
+  ProjectDirectory,
+} from './scripts/project-directory.ts';
 import { findMatchingRoute } from './scripts/routes.ts';
 
 interface Config {
@@ -101,7 +101,8 @@ const cert = fs.readFileSync('localhost-cert.pem');
 
 const server = createSecureServer({ key, cert });
 
-const routes = readConfigRoutes();
+const projectDir = ProjectDirectory.fromCwd();
+const routes = projectDir.readRoutes();
 const serverManifest = readServerManifest(config);
 const clientManifest = readClientManifest(config);
 
@@ -160,8 +161,8 @@ server.on('stream', async (stream, headers) => {
       return;
     }
 
-    const templateName = getRouteTemplateName(ancestors, route);
-    const entryName = getRouteEntryName(ancestors, route);
+    const templateName = getTemplateName({ ancestors, route });
+    const entryName = getEntryName({ ancestors, route });
 
     const clientEntry = `.build/client/${entryName}.tsx`;
     const serverEntry = `.build/server/${entryName}.tsx`;

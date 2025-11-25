@@ -1,10 +1,8 @@
-import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { glob } from 'glob';
-import { findProjectRoot } from './lib.ts';
+import { ProjectDirectory } from './project-directory.ts';
 
-const projectRoot = findProjectRoot();
-const entryFiles = glob.sync(path.join(projectRoot, '.build/ssr/entry-*.js'));
+const projectDir = ProjectDirectory.fromCwd();
+const entryFiles = projectDir.getAllBuiltServerEntries();
 
 for (const entryFile of entryFiles) {
   const url = pathToFileURL(entryFile).href;
