@@ -1,12 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { IslandEntry } from '../lib/island';
 import { generateClientEntry } from './client-entry';
 import { ProjectDirectory } from './project-directory';
 import { RenderParams, renderToHtmlAndIslands } from './render';
-import { RoutePath } from './routes';
 
-export function renderPage(params: RenderParams) {
+export function build(params: RenderParams) {
   const projectDir = ProjectDirectory.fromCwd();
   const { html, islands } = renderToHtmlAndIslands(params);
   const templatePath = projectDir.getTemplatePath(params.path);
@@ -17,11 +15,19 @@ export function renderPage(params: RenderParams) {
   console.log(`✓ rendered ${projectDir.relative(templatePath)}`);
 
   if (islands.length > 0) {
-    const clientEntryPath = writeClientEntry(projectDir, params.path, islands);
+    const entryPath = projectDir.getClientEntryPath(params.path);
+    const entryDir = path.dirname(entryPath);
 
-    const relativeClientEntryPath = projectDir.relative(clientEntryPath);
+    const code = generateClientEntry(islands, file => {
+      const componentAbsPath = path.join(projectDir.projectRoot, file);
+      const relativePath = path.relative(entryDir, componentAbsPath);
+      return relativePath.replace(/\\/g, '/');
+    });
 
-    console.log(`  • generated ${relativeClientEntryPath}`);
+    fs.mkdirSync(path.dirname(entryPath), { recursive: true });
+    fs.writeFileSync(entryPath, code);
+
+    console.log(`  • generated ${projectDir.relative(entryPath)}`);
 
     for (const { entry } of islands) {
       const { component, exportName } = entry;
@@ -29,24 +35,4 @@ export function renderPage(params: RenderParams) {
       console.log(`    ◦ ${name}`);
     }
   }
-}
-
-function writeClientEntry(
-  projectDir: ProjectDirectory,
-  routePath: RoutePath,
-  islands: { file: string; entry: IslandEntry }[],
-): string {
-  const entryPath = projectDir.getClientEntryPath(routePath);
-  const entryDir = path.dirname(entryPath);
-
-  const code = generateClientEntry(islands, file => {
-    const componentAbsPath = path.join(projectDir.projectRoot, file);
-    const relativePath = path.relative(entryDir, componentAbsPath);
-    return relativePath.replace(/\\/g, '/');
-  });
-
-  fs.mkdirSync(path.dirname(entryPath), { recursive: true });
-  fs.writeFileSync(entryPath, code);
-
-  return entryPath;
 }

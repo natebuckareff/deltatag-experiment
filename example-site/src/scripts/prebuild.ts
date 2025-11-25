@@ -37,9 +37,7 @@ function generateServerEntries(route: NodeRoute) {
 
     // TODO: this file will eventually live in node_modules or something
     const buildImportPath = projectDir.getBuldScriptImportPath();
-    imports.push(
-      `import { renderPage } from ${JSON.stringify(buildImportPath)};`,
-    );
+    imports.push(`import { build } from ${JSON.stringify(buildImportPath)};`);
 
     const layouts = [route, ...ancestors]
       .filter(isNodeRoute)
@@ -68,7 +66,7 @@ function generateServerEntries(route: NodeRoute) {
 
     const runner: string[] = [];
 
-    runner.push(`renderPage({`);
+    runner.push(`build({`);
     runner.push(`  path: {`);
     runner.push(`    ancestors: ${JSON.stringify(ancestors)},`);
     runner.push(`    route: ${JSON.stringify(route)}`);
