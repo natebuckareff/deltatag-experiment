@@ -184,18 +184,12 @@ server.on('stream', async (stream, headers) => {
     const jsEntry = clientChunks[0].file;
     const jsImported = clientChunks.slice(1).flatMap(chunk => chunk.file);
 
-    const dynamic = clientChunks
-      .flatMap(chunk => chunk.dynamicImports ?? [])
-      .map(key => clientManifest[key]?.file)
-      .filter((file): file is string => file !== undefined);
-
     const links: string[] = [];
     const scripts: string[] = [];
     const linkHeaders: string[] = [];
 
     links.push(...cssImported.map(file => createLink('stylesheet', file)));
     links.push(...jsImported.map(file => createLink('modulepreload', file)));
-    links.push(...dynamic.map(file => createLink('modulepreload', file)));
     scripts.push(createScript(jsEntry));
 
     for (const file of cssImported) {
@@ -203,10 +197,6 @@ server.on('stream', async (stream, headers) => {
     }
 
     for (const file of jsImported) {
-      linkHeaders.push(`</assets/${file}>; rel="modulepreload"; as="script"`);
-    }
-
-    for (const file of dynamic) {
       linkHeaders.push(`</assets/${file}>; rel="modulepreload"; as="script"`);
     }
 
