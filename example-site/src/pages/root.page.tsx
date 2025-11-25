@@ -1,12 +1,6 @@
 import type { JSX } from 'solid-js';
 import { HydrationScript } from 'solid-js/web';
-import type { PageConfig } from '../scripts/build';
 import { createVar } from '../tera';
-
-export const page: PageConfig = {
-  path: '/',
-  layout: true,
-};
 
 export default function Root(props: { children: JSX.Element }) {
   const ctx = createVar<{ links: string; scripts: string }>();
