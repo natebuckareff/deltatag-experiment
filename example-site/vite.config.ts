@@ -14,9 +14,9 @@ export default defineConfig(({ mode }) => {
         ssrEmitAssets: true,
         target: 'esnext',
         assetsDir: '',
-        outDir: '.build/ssr',
+        outDir: '.build/bundle/server',
         rollupOptions: {
-          input: glob.sync('.build/server/entry-*.tsx'),
+          input: glob.sync('.build/generated/server/entry-*.tsx'),
         },
       },
       ssr: {
@@ -30,10 +30,19 @@ export default defineConfig(({ mode }) => {
         manifest: true,
         target: 'esnext',
         assetsDir: '',
-        outDir: '.output/client',
+        outDir: '.build/bundle/client',
         rollupOptions: {
-          input: glob.sync('.build/client/entry-*.tsx'),
+          input: glob.sync('.build/generated/client/entry-*.tsx'),
         },
+      },
+    };
+  } else if (mode === 'development') {
+    // Dev mode config - handled by dev-server.ts
+    // This config is used when vite.config.ts is loaded by the dev server
+    return {
+      plugins: [islandMetaPlugin(), devtools(), solidPlugin({ ssr: true })],
+      ssr: {
+        noExternal: ['solid-js'],
       },
     };
   } else {

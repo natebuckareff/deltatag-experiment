@@ -3,6 +3,30 @@ import path from 'node:path';
 import { glob } from 'glob';
 import type { NodeRoute, RoutePath } from './routes.ts';
 
+/*
+  .build
+  |-- generated
+  |   |-- server
+  |   |   '-- entry-*.tsx
+  |   '-- client
+  |       '-- entry-*.tsx
+  |-- server
+  |   |-- <chunk>
+  |   '-- .vite
+  |       '-- manifest.json
+  '-- client
+      |-- <chunk>
+      '-- .vite
+          '-- manifest.json
+
+  .output
+  |-- manifest.json
+  |-- static
+  |   '-- <chunk>
+  '-- templates
+      '-- *.html
+*/
+
 export type ViteManifest = Record<string, ViteManifestChunk>;
 
 export interface ViteManifestChunk {
@@ -46,47 +70,36 @@ export class ProjectDirectory {
     return path.relative(this.projectRoot, to);
   }
 
+  getBuldScriptImportPath(): string {
+    // TODO: this file will eventually live in node_modules or something
+    return path.join(this.projectRoot, 'src/scripts/build.ts');
+  }
+
+  readRoutes(): NodeRoute {
+    const routesPath = path.join(this.projectRoot, 'routes.json');
+    return JSON.parse(fs.readFileSync(routesPath, 'utf-8'));
+  }
+
   getBuildDir(): string {
     return path.join(this.projectRoot, '.build');
   }
 
-  getOutputDir(): string {
-    return path.join(this.projectRoot, '.output');
+  getGeneratedDir(): string {
+    return path.join(this.getBuildDir(), 'generated');
   }
 
-  getRoutesPath(): string {
-    return path.join(this.projectRoot, 'routes.json');
+  getServerEntriesDir(): string {
+    return path.join(this.getGeneratedDir(), 'server');
   }
 
-  getTemplatePath(routePath: RoutePath): string {
-    const name = getTemplateName(routePath);
-    const filename = name + '.html';
-    return path.join(this.getOutputDir(), 'templates', filename);
-  }
-
-  getServerAssetPath(filename: string): string {
-    return path.join(this.getBuildDir(), 'ssr', filename);
-  }
-
-  getClientAssetPath(filename: string): string {
-    return path.join(this.getOutputDir(), 'client', filename);
-  }
-
-  getClientEntryPath(kebabOrRoutePath: string | RoutePath): string {
-    const name = getEntryName(kebabOrRoutePath);
-    const filename = name + '.tsx';
-    return path.join(this.getBuildDir(), 'client', filename);
+  getClientEntriesDir(): string {
+    return path.join(this.getGeneratedDir(), 'client');
   }
 
   getServerEntryPath(kebabOrRoutePath: string | RoutePath): string {
     const name = getEntryName(kebabOrRoutePath);
     const filename = name + '.tsx';
-    return path.join(this.getBuildDir(), 'server', filename);
-  }
-
-  getClientManifestKey(kebabOrRoutePath: string | RoutePath): string {
-    const entryPath = this.getClientEntryPath(kebabOrRoutePath);
-    return path.relative(this.projectRoot, entryPath);
+    return path.join(this.getServerEntriesDir(), filename);
   }
 
   getServerManifestKey(kebabOrRoutePath: string | RoutePath): string {
@@ -94,46 +107,83 @@ export class ProjectDirectory {
     return path.relative(this.projectRoot, entryPath);
   }
 
-  getBuldScriptImportPath(): string {
-    // TODO: this file will eventually live in node_modules or something
-    return path.join(this.projectRoot, 'src/scripts/build.ts');
+  getClientEntryPath(kebabOrRoutePath: string | RoutePath): string {
+    const name = getEntryName(kebabOrRoutePath);
+    const filename = name + '.tsx';
+    return path.join(this.getClientEntriesDir(), filename);
   }
 
-  getServerEntriesDir(): string {
-    return path.join(this.getBuildDir(), 'server');
+  getClientManifestKey(kebabOrRoutePath: string | RoutePath): string {
+    const entryPath = this.getClientEntryPath(kebabOrRoutePath);
+    return path.relative(this.projectRoot, entryPath);
+  }
+
+  getBundleDir(): string {
+    return path.join(this.getBuildDir(), 'bundle');
+  }
+
+  getServerBuildDir(): string {
+    return path.join(this.getBundleDir(), 'server');
   }
 
   getAllBuiltServerEntries(): string[] {
-    const buildDir = this.getBuildDir();
-    return glob.sync(path.join(buildDir, 'ssr/entry-*.js'));
+    return glob.sync(path.join(this.getServerBuildDir(), 'entry-*.js'));
   }
 
-  getManifestPath(): string {
+  getServerBuildPath(filename: string): string {
+    return path.join(this.getServerBuildDir(), filename);
+  }
+
+  readServerViteManifest(): ViteManifest {
+    const manifestPath = path.join(
+      this.getServerBuildDir(),
+      '.vite',
+      'manifest.json',
+    );
+    return JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  }
+
+  getClientAssetDir(): string {
+    return path.join(this.getBundleDir(), 'client');
+  }
+
+  getAllBuiltClientAssets(): string[] {
+    return glob.sync(path.join(this.getClientAssetDir(), '*'));
+  }
+
+  getClientAssetPath(filename: string): string {
+    return path.join(this.getClientAssetDir(), filename);
+  }
+
+  readClientViteManifest(): ViteManifest {
+    const manifestPath = path.join(
+      this.getClientAssetDir(),
+      '.vite',
+      'manifest.json',
+    );
+    return JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  }
+
+  getOutputDir(): string {
+    return path.join(this.projectRoot, '.output');
+  }
+
+  getOutputManifestPath(): string {
     return path.join(this.getOutputDir(), 'manifest.json');
   }
 
-  readRoutes(): NodeRoute {
-    return JSON.parse(fs.readFileSync(this.getRoutesPath(), 'utf-8'));
+  getOutputStaticDir(): string {
+    return path.join(this.getOutputDir(), 'static');
   }
 
-  readServerManifest(): ViteManifest {
-    const manifestPath = path.join(
-      this.getBuildDir(),
-      'ssr',
-      '.vite',
-      'manifest.json',
-    );
-    return JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  getOutputTemplateDir(): string {
+    return path.join(this.getOutputDir(), 'templates');
   }
 
-  readClientManifest(): ViteManifest {
-    const manifestPath = path.join(
-      this.getOutputDir(),
-      'client',
-      '.vite',
-      'manifest.json',
-    );
-    return JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  getTemplatePath(kebabOrRoutePath: string | RoutePath): string {
+    const name = getTemplateName(kebabOrRoutePath);
+    const filename = name + '.html';
+    return path.join(this.getOutputTemplateDir(), filename);
   }
 }
 

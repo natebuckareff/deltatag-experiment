@@ -118,8 +118,8 @@ function buildTemplates(
   projectDir: ProjectDirectory,
   templates: string[],
 ): Record<string, ManifestTemplate> {
-  const server = projectDir.readServerManifest();
-  const client = projectDir.readClientManifest();
+  const server = projectDir.readServerViteManifest();
+  const client = projectDir.readClientViteManifest();
 
   const output: Record<string, ManifestTemplate> = {};
 

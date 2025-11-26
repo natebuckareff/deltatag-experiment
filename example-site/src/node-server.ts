@@ -4,11 +4,6 @@ import path from 'node:path';
 import type { Manifest } from './scripts/manifest.ts';
 import { findMatchingRoute } from './scripts/manifest.ts';
 
-interface Config {
-  buildDir: string;
-  outputDir: string;
-}
-
 function createLink(type: string, href: string): string {
   return `<link rel="${type}" href="/assets/${href}" />`;
 }
@@ -17,19 +12,13 @@ function createScript(src: string): string {
   return `<script type="module" src="/assets/${src}"></script>`;
 }
 
-const config: Config = {
-  buildDir: path.join(import.meta.dirname, '../.build'),
-  outputDir: path.join(import.meta.dirname, '../.output'),
-};
-
 const key = fs.readFileSync('localhost-key.pem');
 const cert = fs.readFileSync('localhost-cert.pem');
-
 const server = createSecureServer({ key, cert });
 
-const manifest: Manifest = JSON.parse(
-  fs.readFileSync(path.join(config.outputDir, 'manifest.json'), 'utf-8'),
-);
+const outputDir = path.join(import.meta.dirname, '../.output');
+const manifestPath = path.join(outputDir, 'manifest.json');
+const manifest: Manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
 
 server.on('stream', async (stream, headers) => {
   try {
@@ -48,13 +37,7 @@ server.on('stream', async (stream, headers) => {
       console.log('ASSET_REQUEST', requestUrl);
 
       const asset = requestUrl.slice('/assets/'.length);
-
-      // TODO: very gross and hacky, can do better with static asset path mappings
-      let assetPath = path.join(config.outputDir, 'client', asset);
-      // if (!fs.existsSync(assetPath)) {
-      //   assetPath = path.join(config.buildDir, 'ssr', asset);
-      // }
-
+      const assetPath = path.join(outputDir, 'static', asset);
       const assetExt = path.extname(assetPath);
       const contentTypes: Record<string, string> = {
         '.css': 'text/css',
@@ -117,7 +100,7 @@ server.on('stream', async (stream, headers) => {
     await new Promise(r => setTimeout(r, 1000));
 
     let html = fs.readFileSync(
-      path.join(config.outputDir, 'templates', route.template),
+      path.join(outputDir, 'templates', route.template),
       'utf-8',
     );
 
