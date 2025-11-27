@@ -34,11 +34,10 @@ export default defineConfig(({ mode }) => {
         rollupOptions: {
           input: glob.sync('.build/generated/client/entry-*.tsx'),
         },
+        minify: import.meta.env.PROD,
       },
     };
   } else if (mode === 'development') {
-    // Dev mode config - handled by dev-server.ts
-    // This config is used when vite.config.ts is loaded by the dev server
     return {
       plugins: [islandMetaPlugin(), devtools(), solidPlugin({ ssr: true })],
       ssr: {
