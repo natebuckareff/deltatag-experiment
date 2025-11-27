@@ -35,7 +35,6 @@ interface ClientDirectiveMatch {
   attributes: JSXAttribute[];
 }
 
-const META_PROP = '__meta';
 const CLIENT_NAMESPACE = 'client';
 
 function stripQuery(id: string): string {
@@ -223,17 +222,6 @@ function removeClientAttributes(
   return applyReplacements(source, removals);
 }
 
-function findFirstChildElement(
-  children: JSXElement['children'],
-): JSXElement | null {
-  for (const child of children) {
-    if (child.type === 'JSXElement') {
-      return child;
-    }
-  }
-  return null;
-}
-
 function insertIslandImport(
   code: string,
   id: string,
@@ -268,7 +256,7 @@ export function islandMetaPlugin(): Plugin {
         return null;
       }
 
-      if (!code.includes('client:') && !code.includes('<Island')) {
+      if (!code.includes('client:')) {
         return null;
       }
 
@@ -291,7 +279,6 @@ export function islandMetaPlugin(): Plugin {
 
       const imports = collectImports(parsed.program as Program, id);
       const clientElements: ClientDirectiveMatch[] = [];
-      const islandElements: JSXElement[] = [];
 
       new Visitor({
         JSXElement(node: JSXElement) {
@@ -302,14 +289,6 @@ export function islandMetaPlugin(): Plugin {
 
           if (clientAttrs.length > 0) {
             clientElements.push({ element: node, attributes: clientAttrs });
-            return;
-          }
-
-          if (
-            opening.name.type === 'JSXIdentifier' &&
-            opening.name.name === 'Island'
-          ) {
-            islandElements.push(node);
           }
         },
       }).visit(parsed.program as Program);
@@ -370,80 +349,6 @@ export function islandMetaPlugin(): Plugin {
           start: element.start,
           end: element.end,
           content: replacement,
-        });
-      }
-
-      for (const element of islandElements) {
-        const opening = element.openingElement;
-        const hasMeta = (opening.attributes as JSXAttribute[]).some(attr => {
-          const name = attr.name as JSXAttributeName;
-          return name.type === 'JSXIdentifier' && name.name === META_PROP;
-        });
-        const hasId = (opening.attributes as JSXAttribute[]).some(attr => {
-          const name = attr.name as JSXAttributeName;
-          return name.type === 'JSXIdentifier' && name.name === 'id';
-        });
-
-        if (hasMeta && hasId) {
-          continue;
-        }
-
-        const child = findFirstChildElement(element.children);
-        if (!child || isDomLikeName(child.openingElement.name)) {
-          this.warn(
-            `[island-meta] unable to infer island child component in ${id}; skipping metadata injection`,
-          );
-          continue;
-        }
-
-        const componentImport = resolveComponentImport(
-          child.openingElement.name,
-          imports,
-        );
-        if (!componentImport) {
-          this.warn(
-            `[island-meta] unable to resolve import for island child ${jsxNameToString(
-              child.openingElement.name,
-            )} in ${id}`,
-          );
-          continue;
-        }
-
-        const islandId =
-          hasId && opening.attributes.length > 0
-            ? null
-            : generateIslandId(
-                componentImport.file,
-                jsxNameToString(child.openingElement.name),
-                element.start,
-              );
-
-        const openStart = opening.start;
-        const openEnd = opening.end;
-        const openingSource = code.slice(openStart, openEnd);
-        const insertionPoint = opening.selfClosing ? openEnd - 2 : openEnd - 1;
-
-        const attrs: string[] = [];
-        if (!hasId && islandId) {
-          attrs.push(` id="${islandId}"`);
-        }
-        if (!hasMeta) {
-          attrs.push(
-            ` ${META_PROP}={{ component: "${jsxNameToString(
-              child.openingElement.name,
-            )}", file: "${componentImport.file}", exportName: "${componentImport.exportName}" }}`,
-          );
-        }
-
-        const updatedOpening =
-          openingSource.slice(0, insertionPoint - openStart) +
-          attrs.join('') +
-          openingSource.slice(insertionPoint - openStart);
-
-        replacements.push({
-          start: openStart,
-          end: openEnd,
-          content: updatedOpening,
         });
       }
 
