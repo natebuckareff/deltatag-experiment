@@ -1,22 +1,42 @@
-import { IslandEntry } from '../lib/island';
+import type { IslandEntry } from '../lib/island';
 
-export function generateClientEntry(
-  islands: IslandEntry[],
-  resolveImportPath: (file: string, index: number) => string,
-): string {
+export interface ClientEntryParams {
+  islands: IslandEntry[];
+  additionalImports?: string[];
+  devtools?: boolean;
+  jsx?: boolean;
+  resolveImportPath: (file: string) => string;
+}
+
+export function generateClientEntry(params: ClientEntryParams): string {
   function* codegen() {
-    yield `/* @refresh reload */`; // TODO: devmode only
+    if (params.devtools) {
+      yield `/* @refresh reload */`;
+      yield `import 'solid-devtools';`;
+    }
+
     yield `import { hydrate } from 'solid-js/web';`;
-    yield `import 'solid-devtools';`; // TODO: devmode only
+
+    if (!params.jsx) {
+      yield `import { createComponent } from 'solid-js';`;
+    }
+
+    for (const file of params.additionalImports ?? []) {
+      const importPath = params.resolveImportPath(file);
+      const importFrom = JSON.stringify(importPath);
+      yield `import ${importFrom};`;
+    }
 
     let importCount = 0;
 
     const hydrations: { alias: string; id: string }[] = [];
 
-    for (const island of islands) {
-      const importPath = resolveImportPath(island.file, importCount++);
+    for (const island of params.islands) {
+      const importPath = params.resolveImportPath(island.file);
       const importFrom = JSON.stringify(importPath);
       const alias = `Island${importCount}`;
+
+      importCount += 1;
 
       yield island.exportName === 'default'
         ? `import ${alias} from ${importFrom};`
@@ -29,7 +49,11 @@ export function generateClientEntry(
     yield `\n\n`;
 
     for (const { alias, id } of hydrations) {
-      yield `hydrate(() => <${alias} />, document.getElementById(${id}), { renderId: ${id} });`;
+      const component = params.jsx
+        ? `<${alias} />`
+        : `createComponent(${alias}, {})`;
+
+      yield `hydrate(() => ${component}, document.getElementById(${id}), { renderId: ${id} });`;
     }
   }
 

@@ -1,5 +1,6 @@
 import type { Plugin, ViteDevServer } from 'vite';
 import type { IslandEntry } from '../lib/island';
+import { generateClientEntry } from './client-entry.ts';
 
 interface VirtualClientEntriesPlugin extends Plugin {
   setRoute(route: string, islands: IslandEntry[], modules: string[]): void;
@@ -68,56 +69,11 @@ export function virtualClientEntriesPlugin(): VirtualClientEntriesPlugin {
         return `// No islands for route: ${route}`;
       }
 
-      return generateClientEntryCode(islands, modules);
+      return generateClientEntry({
+        islands,
+        additionalImports: modules,
+        resolveImportPath: file => `/${file}`,
+      });
     },
   };
-}
-
-function generateClientEntryCode(
-  islandRegistry: IslandEntry[],
-  modules: string[],
-): string {
-  const imports: string[] = [];
-  const hydrations: string[] = [];
-
-  // 1) Import route modules for CSS side effects
-  for (const file of modules) {
-    const importPath = `/${file}`; // same normalization as islands
-    const importFrom = JSON.stringify(importPath);
-    imports.push(`import ${importFrom};`);
-  }
-
-  for (const island of islandRegistry) {
-    const importPath = `/${island.file}`;
-    const importFrom = JSON.stringify(importPath);
-    const alias = `Island${imports.length}`;
-
-    const importCode =
-      island.exportName === 'default'
-        ? `import ${alias} from ${importFrom};`
-        : `import { ${island.exportName} as ${alias} } from ${importFrom};`;
-
-    imports.push(importCode);
-
-    const id = JSON.stringify(island.id);
-
-    const hydrationCode =
-      `hydrate(` +
-      `() => createComponent(${alias}, {}), ` +
-      `document.getElementById(${id}), ` +
-      `{ renderId: ${id} }` +
-      `);`;
-
-    hydrations.push(hydrationCode);
-  }
-
-  return [
-    `/* @refresh reload */`,
-    `import { hydrate } from 'solid-js/web';`,
-    `import { createComponent } from 'solid-js';`,
-    `import 'solid-devtools';`,
-    imports.join('\n'),
-    '',
-    hydrations.join('\n'),
-  ].join('\n');
 }

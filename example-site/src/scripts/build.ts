@@ -18,10 +18,13 @@ export function build(params: RenderParams) {
     const entryPath = projectDir.getClientEntryPath(params.match);
     const entryDir = path.dirname(entryPath);
 
-    const code = generateClientEntry(islands, file => {
-      const componentAbsPath = path.join(projectDir.projectRoot, file);
-      const relativePath = path.relative(entryDir, componentAbsPath);
-      return relativePath.replace(/\\/g, '/');
+    const code = generateClientEntry({
+      islands,
+      resolveImportPath: file => {
+        const componentAbsPath = path.join(projectDir.projectRoot, file);
+        const relativePath = path.relative(entryDir, componentAbsPath);
+        return relativePath.replace(/\\/g, '/');
+      },
     });
 
     fs.mkdirSync(path.dirname(entryPath), { recursive: true });
