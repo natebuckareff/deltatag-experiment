@@ -61,7 +61,7 @@ function generateServerEntries(route: NodeRoute) {
     const runner: string[] = [];
 
     runner.push(`build({`);
-    runner.push(`  path: {`);
+    runner.push(`  match: {`);
     runner.push(`    ancestors: ${JSON.stringify(ancestors)},`);
     runner.push(`    route: ${JSON.stringify(route)}`);
     runner.push(`  },`);
