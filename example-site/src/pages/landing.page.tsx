@@ -1,5 +1,4 @@
 import { Counter } from '../components/counter';
-import { Island } from '../lib/island';
 import { createVar } from '../tera';
 import '../pages/landing.css';
 
@@ -9,9 +8,7 @@ export default function LandingPage() {
     <div>
       <div>landing page {ctx.username}</div>
       <h1 class="text-3xl font-bold underline text-red-500">Hello world!</h1>
-      <Island>
-        <Counter />
-      </Island>
+      <Counter client:load />
     </div>
   );
 }

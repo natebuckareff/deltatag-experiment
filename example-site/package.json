@@ -6,7 +6,9 @@
     "dev": "tsx src/dev-server.ts",
     "start": "node --watch src/node-server.ts",
     "build:server": "vite build --mode server",
-    "build:client": "vite build --mode client"
+    "build:client": "vite build --mode client",
+    "lint": "biome check",
+    "typeck": "tsc --noEmit"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.17",
@@ -16,7 +18,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.6",
+    "@oxc-project/types": "^0.99.0",
     "glob": "^13.0.0",
+    "oxc-parser": "^0.99.0",
     "solid-devtools": "^0.34.4",
     "typescript": "^5.9.3",
     "vite": "^7.2.2",

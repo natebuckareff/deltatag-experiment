@@ -1,7 +1,15 @@
-// TODO: llm generated; please rewrite
-
 import crypto from 'node:crypto';
 import path from 'node:path';
+import type {
+  ImportDeclaration,
+  ImportDeclarationSpecifier,
+  JSXAttribute,
+  JSXAttributeName,
+  JSXElement,
+  JSXElementName,
+  Program,
+} from '@oxc-project/types';
+import { parseSync, Visitor } from 'oxc-parser';
 import type { Plugin } from 'vite';
 
 interface ImportInfo {
@@ -9,12 +17,72 @@ interface ImportInfo {
   exportName: string;
 }
 
+interface CollectedImports {
+  named: Map<string, ImportInfo>;
+  namespaces: Map<string, string>;
+  hasIsland: boolean;
+  lastImportEnd: number | null;
+}
+
+interface Replacement {
+  start: number;
+  end: number;
+  content: string;
+}
+
+interface ClientDirectiveMatch {
+  element: JSXElement;
+  attributes: JSXAttribute[];
+}
+
+const META_PROP = '__meta';
+const CLIENT_NAMESPACE = 'client';
+
+function stripQuery(id: string): string {
+  return id.split('?', 1)[0] ?? id;
+}
+
+function findSrcRoot(filePath: string): string | null {
+  const parts = stripQuery(filePath).split(path.sep);
+  const index = parts.lastIndexOf('src');
+  return index === -1 ? null : parts.slice(0, index + 1).join(path.sep);
+}
+
+function ensureExtension(p: string): string {
+  return /\.[mc]?[tj]sx?$/.test(p) ? p : `${p}.tsx`;
+}
+
+function normalizeToProjectPath(
+  importPath: string,
+  currentFileId: string,
+): string {
+  if (!importPath.startsWith('.')) {
+    return importPath;
+  }
+
+  const absolutePath = path.resolve(
+    path.dirname(stripQuery(currentFileId)),
+    importPath,
+  );
+  const srcRoot = findSrcRoot(currentFileId);
+  if (!srcRoot) {
+    return importPath;
+  }
+
+  const relative = path.relative(srcRoot, absolutePath);
+  if (relative.startsWith('..')) {
+    return importPath;
+  }
+
+  const normalized = relative.replace(/\\/g, '/');
+  return ensureExtension(`src/${normalized}`);
+}
+
 function generateIslandId(
   file: string,
   component: string,
   sourceLocation: number,
 ): string {
-  // Hash based on file path, component, and position in source
   const hash = crypto
     .createHash('sha256')
     .update(`${file}:${component}:${sourceLocation}`)
@@ -24,37 +92,170 @@ function generateIslandId(
   return `island-${hash}`;
 }
 
-function normalizeToProjectPath(
-  importPath: string,
-  currentFileId: string,
+function jsxNameToString(name: JSXElementName): string {
+  if (name.type === 'JSXIdentifier') {
+    return name.name;
+  }
+
+  if (name.type === 'JSXMemberExpression') {
+    const object =
+      name.object.type === 'JSXIdentifier'
+        ? name.object.name
+        : jsxNameToString(name.object);
+    return `${object}.${name.property.name}`;
+  }
+
+  return `${name.namespace.name}:${name.name.name}`;
+}
+
+function collectImports(program: Program, id: string): CollectedImports {
+  const named = new Map<string, ImportInfo>();
+  const namespaces = new Map<string, string>();
+  let hasIsland = false;
+  let lastImportEnd: number | null = null;
+
+  for (const node of program.body) {
+    if (node.type !== 'ImportDeclaration') continue;
+
+    lastImportEnd = node.end;
+    const importDecl = node as ImportDeclaration;
+    const sourceValue = importDecl.source.value;
+    const normalizedPath = normalizeToProjectPath(sourceValue, id);
+
+    for (const specifier of importDecl.specifiers) {
+      const spec = specifier as ImportDeclarationSpecifier;
+      if (spec.type === 'ImportSpecifier') {
+        const exportName =
+          spec.imported.type === 'Identifier'
+            ? spec.imported.name
+            : spec.imported.value;
+        named.set(spec.local.name, {
+          file: normalizedPath,
+          exportName,
+        });
+        if (spec.local.name === 'Island') {
+          hasIsland = true;
+        }
+      } else if (spec.type === 'ImportDefaultSpecifier') {
+        named.set(spec.local.name, {
+          file: normalizedPath,
+          exportName: 'default',
+        });
+      } else if (spec.type === 'ImportNamespaceSpecifier') {
+        namespaces.set(spec.local.name, normalizedPath);
+      }
+    }
+  }
+
+  return { named, namespaces, hasIsland, lastImportEnd };
+}
+
+function resolveComponentImport(
+  name: JSXElementName,
+  imports: CollectedImports,
+): ImportInfo | undefined {
+  if (name.type === 'JSXIdentifier') {
+    return imports.named.get(name.name);
+  }
+
+  if (name.type === 'JSXMemberExpression') {
+    const base =
+      name.object.type === 'JSXIdentifier'
+        ? name.object.name
+        : jsxNameToString(name.object);
+    const file = imports.namespaces.get(base);
+    if (!file) return undefined;
+    return { file, exportName: name.property.name };
+  }
+
+  return undefined;
+}
+
+function isDomLikeName(name: JSXElementName): boolean {
+  return name.type === 'JSXIdentifier' && /^[a-z]/.test(name.name);
+}
+
+function getClientDirectiveAttributes(attrs: JSXAttribute[]): JSXAttribute[] {
+  return attrs.filter(attr => {
+    if (attr.type !== 'JSXAttribute') return false;
+    const name = attr.name as JSXAttributeName;
+    return (
+      name.type === 'JSXNamespacedName' &&
+      name.namespace.name === CLIENT_NAMESPACE
+    );
+  });
+}
+
+function applyReplacements(code: string, replacements: Replacement[]): string {
+  const sorted = [...replacements].sort((a, b) => a.start - b.start);
+
+  let result = '';
+  let lastIndex = 0;
+
+  for (const replacement of sorted) {
+    if (replacement.start < lastIndex) {
+      throw new Error('[island-meta] overlapping replacements detected');
+    }
+    result += code.slice(lastIndex, replacement.start) + replacement.content;
+    lastIndex = replacement.end;
+  }
+
+  result += code.slice(lastIndex);
+  return result;
+}
+
+function removeClientAttributes(
+  source: string,
+  baseOffset: number,
+  attributes: JSXAttribute[],
 ): string {
-  // If already normalized or an alias, return as-is
-  if (!importPath.startsWith('.')) {
-    return importPath;
+  const removals: Replacement[] = attributes.map(attr => {
+    const start = (() => {
+      let cursor = attr.start - baseOffset;
+      while (cursor > 0 && /\s/.test(source.charAt(cursor - 1))) {
+        cursor -= 1;
+      }
+      return cursor;
+    })();
+    return { start, end: attr.end - baseOffset, content: '' };
+  });
+
+  return applyReplacements(source, removals);
+}
+
+function findFirstChildElement(
+  children: JSXElement['children'],
+): JSXElement | null {
+  for (const child of children) {
+    if (child.type === 'JSXElement') {
+      return child;
+    }
+  }
+  return null;
+}
+
+function insertIslandImport(
+  code: string,
+  id: string,
+  insertAfter: number | null,
+): Replacement {
+  const filePath = stripQuery(id);
+  const fileDir = path.dirname(filePath);
+  const srcRoot = findSrcRoot(filePath);
+  const islandPath = srcRoot
+    ? path.join(srcRoot, 'lib', 'island')
+    : path.resolve(fileDir, '../lib/island');
+
+  let relative = path.relative(fileDir, islandPath).replace(/\\/g, '/');
+  if (!relative.startsWith('.')) {
+    relative = `./${relative}`;
   }
 
-  // Resolve to absolute path
-  const currentDir = path.dirname(currentFileId);
-  const absolutePath = path.resolve(currentDir, importPath);
-
-  // Find project root by looking for src/ in the path
-  const pathParts = absolutePath.split(path.sep);
-  const srcIndex = pathParts.indexOf('src');
-
-  if (srcIndex === -1) {
-    console.warn('[island-meta] Could not find src/ in path:', absolutePath);
-    return importPath; // Fallback to original
-  }
-
-  // Get path from src/ onwards
-  const fromSrc = pathParts.slice(srcIndex).join('/'); // Always use forward slashes
-
-  // Add .tsx if not present (handles import path → file path)
-  if (!fromSrc.endsWith('.tsx') && !fromSrc.endsWith('.ts')) {
-    return fromSrc + '.tsx';
-  }
-
-  return fromSrc;
+  return {
+    start: insertAfter ?? 0,
+    end: insertAfter ?? 0,
+    content: `import { Island } from '${relative}';\n`,
+  };
 }
 
 export function islandMetaPlugin(): Plugin {
@@ -63,126 +264,202 @@ export function islandMetaPlugin(): Plugin {
     enforce: 'pre',
 
     transform(code: string, id: string) {
-      if (!id.endsWith('.tsx') || !code.includes('<Island')) {
+      if (!id.endsWith('.tsx') && !id.endsWith('.jsx')) {
         return null;
       }
 
-      // Track both regular imports and namespace imports
-      const imports = new Map<string, ImportInfo>();
-      const namespaces = new Map<string, string>(); // namespace → file path
-
-      // Regular named/default imports
-      const importRegex =
-        /import\s+(?:(?:\{([^}]+)\})|(\w+))\s+from\s+['"]([^'"]+)['"]/g;
-
-      for (const match of code.matchAll(importRegex)) {
-        const [, named, defaultImport, source] = match;
-
-        // Normalize the path
-        const normalizedPath = normalizeToProjectPath(source ?? '', id);
-
-        if (named) {
-          const names = named.split(',').map(s => s.trim());
-          for (const name of names) {
-            const parts = name.split(/\s+as\s+/);
-            const exportName = parts[0]?.trim() ?? '';
-            const localName =
-              parts.length > 1
-                ? (parts[1]?.trim() ?? '')
-                : (parts[0]?.trim() ?? '');
-            imports.set(localName, { file: normalizedPath, exportName });
-          }
-        }
-        if (defaultImport) {
-          imports.set(defaultImport, {
-            file: normalizedPath,
-            exportName: 'default',
-          });
-        }
+      if (!code.includes('client:') && !code.includes('<Island')) {
+        return null;
       }
 
-      // Namespace imports: import * as Name from 'path'
-      const namespaceRegex =
-        /import\s+\*\s+as\s+(\w+)\s+from\s+['"]([^'"]+)['"]/g;
-
-      for (const match of code.matchAll(namespaceRegex)) {
-        const [, namespaceName, source] = match;
-
-        // Normalize the path
-        const normalizedPath = normalizeToProjectPath(source ?? '', id);
-
-        namespaces.set(namespaceName ?? '', normalizedPath);
+      let parsed;
+      try {
+        parsed = parseSync(id, code, { sourceType: 'module', range: true });
+      } catch (error) {
+        this.warn(`[island-meta] failed to parse ${id}: ${String(error)}`);
+        return null;
       }
 
-      // Find both simple and member expression islands:
-      // <Island ...> <ComponentName /> OR <Island ...> <Namespace.Component />
-      const islandRegex = /<Island(\s+[^>]*)?\s*>\s*<([\w.]+)/g;
+      if (parsed.errors.length > 0) {
+        this.warn(
+          `[island-meta] skipping ${id} due to parse errors:\n${parsed.errors
+            .map(e => e.message)
+            .join('\n')}`,
+        );
+        return null;
+      }
 
-      let transformed = code;
-      let offset = 0;
+      const imports = collectImports(parsed.program as Program, id);
+      const clientElements: ClientDirectiveMatch[] = [];
+      const islandElements: JSXElement[] = [];
 
-      for (const match of code.matchAll(islandRegex)) {
-        const [fullMatch, attributes, componentRef] = match;
+      new Visitor({
+        JSXElement(node: JSXElement) {
+          const opening = node.openingElement;
+          const clientAttrs = getClientDirectiveAttributes(
+            opening.attributes as JSXAttribute[],
+          );
 
-        let importInfo: ImportInfo | undefined;
-
-        // Check if it's a member expression (Namespace.Component)
-        if (componentRef?.includes('.')) {
-          const [namespaceName, exportName] = componentRef.split('.');
-          const file = namespaces.get(namespaceName ?? '');
-          if (file) {
-            importInfo = { file, exportName: exportName ?? '' };
+          if (clientAttrs.length > 0) {
+            clientElements.push({ element: node, attributes: clientAttrs });
+            return;
           }
-        } else {
-          // Simple identifier
-          importInfo = imports.get(componentRef ?? '');
+
+          if (
+            opening.name.type === 'JSXIdentifier' &&
+            opening.name.name === 'Island'
+          ) {
+            islandElements.push(node);
+          }
+        },
+      }).visit(parsed.program as Program);
+
+      const replacements: Replacement[] = [];
+      let needsIslandImport = !imports.hasIsland && clientElements.length > 0;
+
+      for (const { element, attributes } of clientElements) {
+        const name = element.openingElement.name;
+        if (isDomLikeName(name)) {
+          continue;
         }
 
-        if (importInfo) {
-          // Check if user provided an id attribute
-          // const userIdMatch = attributes.match(/id=["']([^"']+)["']/);
-          const userIdMatch = attributes
-            ? attributes.match(/id=["']([^"']+)["']/)
-            : null;
+        const componentImport = resolveComponentImport(name, imports);
+        if (!componentImport) {
+          this.warn(
+            `[island-meta] unable to resolve import for ${jsxNameToString(name)} in ${id}`,
+          );
+          continue;
+        }
 
-          const islandId = userIdMatch
-            ? userIdMatch[1]
+        const customIdAttr = attributes.find(attr => {
+          const attrName = attr.name as JSXAttributeName;
+          return (
+            attrName.type === 'JSXNamespacedName' && attrName.name.name === 'id'
+          );
+        });
+
+        const customId =
+          customIdAttr &&
+          customIdAttr.value &&
+          customIdAttr.value.type === 'Literal' &&
+          typeof customIdAttr.value.value === 'string'
+            ? customIdAttr.value.value
+            : undefined;
+
+        const islandId =
+          customId ??
+          generateIslandId(
+            componentImport.file,
+            jsxNameToString(name),
+            element.start,
+          );
+
+        const elementSource = code.slice(element.start, element.end);
+        const sanitized = removeClientAttributes(
+          elementSource,
+          element.start,
+          attributes,
+        );
+
+        const meta = `__meta={{ component: "${jsxNameToString(
+          name,
+        )}", file: "${componentImport.file}", exportName: "${componentImport.exportName}" }}`;
+        const replacement = `<Island id="${islandId}" ${meta}>${sanitized}</Island>`;
+
+        replacements.push({
+          start: element.start,
+          end: element.end,
+          content: replacement,
+        });
+      }
+
+      for (const element of islandElements) {
+        const opening = element.openingElement;
+        const hasMeta = (opening.attributes as JSXAttribute[]).some(attr => {
+          const name = attr.name as JSXAttributeName;
+          return name.type === 'JSXIdentifier' && name.name === META_PROP;
+        });
+        const hasId = (opening.attributes as JSXAttribute[]).some(attr => {
+          const name = attr.name as JSXAttributeName;
+          return name.type === 'JSXIdentifier' && name.name === 'id';
+        });
+
+        if (hasMeta && hasId) {
+          continue;
+        }
+
+        const child = findFirstChildElement(element.children);
+        if (!child || isDomLikeName(child.openingElement.name)) {
+          this.warn(
+            `[island-meta] unable to infer island child component in ${id}; skipping metadata injection`,
+          );
+          continue;
+        }
+
+        const componentImport = resolveComponentImport(
+          child.openingElement.name,
+          imports,
+        );
+        if (!componentImport) {
+          this.warn(
+            `[island-meta] unable to resolve import for island child ${jsxNameToString(
+              child.openingElement.name,
+            )} in ${id}`,
+          );
+          continue;
+        }
+
+        const islandId =
+          hasId && opening.attributes.length > 0
+            ? null
             : generateIslandId(
-                importInfo.file,
-                componentRef ?? '',
-                match.index!,
+                componentImport.file,
+                jsxNameToString(child.openingElement.name),
+                element.start,
               );
 
-          // Build the props to inject
-          let propsToInject = ` __meta={{ component: "${componentRef}", file: "${importInfo.file}", exportName: "${importInfo.exportName}" }}`;
+        const openStart = opening.start;
+        const openEnd = opening.end;
+        const openingSource = code.slice(openStart, openEnd);
+        const insertionPoint = opening.selfClosing ? openEnd - 2 : openEnd - 1;
 
-          // If no user-provided id, inject it
-          if (!userIdMatch) {
-            propsToInject = ` id="${islandId}"` + propsToInject;
-          }
-
-          // FIXED: Find the position right before the closing '>' of <Island ...>
-          const islandTagMatch = code
-            .slice(match.index!)
-            .match(/<Island[^>]*>/);
-
-          if (!islandTagMatch) {
-            continue;
-          }
-
-          const insertPos =
-            match.index! + islandTagMatch[0].length - 1 + offset;
-
-          transformed =
-            transformed.slice(0, insertPos) +
-            propsToInject +
-            transformed.slice(insertPos);
-
-          offset += propsToInject.length;
+        const attrs: string[] = [];
+        if (!hasId && islandId) {
+          attrs.push(` id="${islandId}"`);
         }
+        if (!hasMeta) {
+          attrs.push(
+            ` ${META_PROP}={{ component: "${jsxNameToString(
+              child.openingElement.name,
+            )}", file: "${componentImport.file}", exportName: "${componentImport.exportName}" }}`,
+          );
+        }
+
+        const updatedOpening =
+          openingSource.slice(0, insertionPoint - openStart) +
+          attrs.join('') +
+          openingSource.slice(insertionPoint - openStart);
+
+        replacements.push({
+          start: openStart,
+          end: openEnd,
+          content: updatedOpening,
+        });
       }
 
-      return transformed === code ? null : { code: transformed };
+      if (needsIslandImport) {
+        replacements.push(
+          insertIslandImport(code, id, imports.lastImportEnd ?? null),
+        );
+      }
+
+      if (replacements.length === 0) {
+        return null;
+      }
+
+      return {
+        code: applyReplacements(code, replacements),
+      };
     },
   };
 }
