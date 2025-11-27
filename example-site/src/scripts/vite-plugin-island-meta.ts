@@ -1,4 +1,5 @@
-// vite-plugin-island-meta.ts
+// TODO: llm generated; please rewrite
+
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { Plugin } from 'vite';
@@ -78,15 +79,17 @@ export function islandMetaPlugin(): Plugin {
         const [, named, defaultImport, source] = match;
 
         // Normalize the path
-        const normalizedPath = normalizeToProjectPath(source, id);
+        const normalizedPath = normalizeToProjectPath(source ?? '', id);
 
         if (named) {
           const names = named.split(',').map(s => s.trim());
           for (const name of names) {
             const parts = name.split(/\s+as\s+/);
-            const exportName = parts[0].trim();
+            const exportName = parts[0]?.trim() ?? '';
             const localName =
-              parts.length > 1 ? parts[1].trim() : parts[0].trim();
+              parts.length > 1
+                ? (parts[1]?.trim() ?? '')
+                : (parts[0]?.trim() ?? '');
             imports.set(localName, { file: normalizedPath, exportName });
           }
         }
@@ -106,9 +109,9 @@ export function islandMetaPlugin(): Plugin {
         const [, namespaceName, source] = match;
 
         // Normalize the path
-        const normalizedPath = normalizeToProjectPath(source, id);
+        const normalizedPath = normalizeToProjectPath(source ?? '', id);
 
-        namespaces.set(namespaceName, normalizedPath);
+        namespaces.set(namespaceName ?? '', normalizedPath);
       }
 
       // Find both simple and member expression islands:
@@ -124,15 +127,15 @@ export function islandMetaPlugin(): Plugin {
         let importInfo: ImportInfo | undefined;
 
         // Check if it's a member expression (Namespace.Component)
-        if (componentRef.includes('.')) {
+        if (componentRef?.includes('.')) {
           const [namespaceName, exportName] = componentRef.split('.');
-          const file = namespaces.get(namespaceName);
+          const file = namespaces.get(namespaceName ?? '');
           if (file) {
-            importInfo = { file, exportName };
+            importInfo = { file, exportName: exportName ?? '' };
           }
         } else {
           // Simple identifier
-          importInfo = imports.get(componentRef);
+          importInfo = imports.get(componentRef ?? '');
         }
 
         if (importInfo) {
@@ -144,7 +147,11 @@ export function islandMetaPlugin(): Plugin {
 
           const islandId = userIdMatch
             ? userIdMatch[1]
-            : generateIslandId(importInfo.file, componentRef, match.index!);
+            : generateIslandId(
+                importInfo.file,
+                componentRef ?? '',
+                match.index!,
+              );
 
           // Build the props to inject
           let propsToInject = ` __meta={{ component: "${componentRef}", file: "${importInfo.file}", exportName: "${importInfo.exportName}" }}`;
