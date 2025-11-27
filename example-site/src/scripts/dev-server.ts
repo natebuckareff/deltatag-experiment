@@ -1,18 +1,10 @@
-import {
-  createServer as createHttpServer,
-  IncomingMessage,
-  ServerResponse,
-} from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
 import path from 'node:path';
 import { type Connect, createServer as createViteServer } from 'vite';
 import { ProjectDirectory } from './project-directory.ts';
 import type { PageModule } from './render.tsx';
-import {
-  findMatchingRoute,
-  findRoutes,
-  getRouteMatchUrl,
-  isNodeRoute,
-} from './routes.ts';
+import { findMatchingRoute, findRoutes, isNodeRoute } from './routes.ts';
 import { virtualClientEntriesPlugin } from './vite-plugin-virtual-client.ts';
 
 async function startServer() {
@@ -39,6 +31,7 @@ async function startServer() {
     try {
       const url = req.url || '/';
 
+      // TODO: can we do this via fallthrough if no route matches instead?
       if (
         url.startsWith('/@') ||
         url.startsWith('/node_modules') ||
@@ -101,9 +94,8 @@ async function startServer() {
       },
     });
 
-    virtualClientPlugin.setRoute(url, islands, pageModules);
-    const virtualModulePath = `/virtual:client-entry${url}`;
-    const script = `<script type="module" src="${virtualModulePath}"></script>`;
+    const id = virtualClientPlugin.setRoute(match, islands, pageModules);
+    const script = `<script type="module" src="${id}"></script>`;
 
     html = html.replace('{{links}}', ''); // styles are loaded as module dependencies
     html = html.replace('{{scripts}}', script);
@@ -124,8 +116,7 @@ async function startServer() {
 
     if (matches.length > 0) {
       for (const match of matches) {
-        const url = getRouteMatchUrl(match);
-        virtualClientPlugin.invalidateRoute(url);
+        virtualClientPlugin.invalidateRoute(match);
       }
 
       vite.ws.send({ type: 'full-reload' });

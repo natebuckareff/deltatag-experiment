@@ -1,14 +1,28 @@
+// TODO: rename vite-plugin-virtual-module
+
 import type { Plugin, ViteDevServer } from 'vite';
 import type { IslandEntry } from '../lib/island';
 import { generateClientEntry } from './client-entry.ts';
+import { getEntryName } from './project-directory.ts';
+import type { RouteMatch } from './routes.ts';
 
 interface VirtualClientEntriesPlugin extends Plugin {
-  setRoute(route: string, islands: IslandEntry[], modules: string[]): void;
-  invalidateRoute(route: string): void;
+  setRoute(
+    match: RouteMatch,
+    islands: IslandEntry[],
+    modules: string[],
+  ): string;
+
+  invalidateRoute(match: RouteMatch): void;
 }
 
-const VIRTUAL_PREFIX = 'virtual:client-entry';
-const RESOLVED_PREFIX = '\0virtual:client-entry:'; // note the colon is arbitrary, just a separator
+const PUBLIC_PREFIX = '/$site/';
+const INTERNAL_PREFIX = `\0${PUBLIC_PREFIX}`;
+
+function getVirtualModuleId(match: RouteMatch): string {
+  const entry = getEntryName(match);
+  return `/$site/${entry}.tsx`;
+}
 
 export function virtualClientEntriesPlugin(): VirtualClientEntriesPlugin {
   let server: ViteDevServer | undefined;
@@ -23,51 +37,38 @@ export function virtualClientEntriesPlugin(): VirtualClientEntriesPlugin {
       server = s;
     },
 
-    setRoute(route, islands, modules) {
-      islandsByRoute.set(route, islands);
-      modulesByRoute.set(route, modules);
+    setRoute(match, islands, modules): string {
+      const id = getVirtualModuleId(match);
+      islandsByRoute.set(id, islands);
+      modulesByRoute.set(id, modules);
+      return id;
     },
 
-    invalidateRoute(route) {
-      islandsByRoute.delete(route);
-      modulesByRoute.delete(route);
+    invalidateRoute(match) {
+      const id = getVirtualModuleId(match);
+      islandsByRoute.delete(id);
+      modulesByRoute.delete(id);
 
-      const id = RESOLVED_PREFIX + (route || '/').replace(/\//g, '_') + '.tsx';
-      const mod = server?.moduleGraph.getModuleById(id);
-      if (mod) {
-        server?.moduleGraph.invalidateModule(mod);
+      const module = server?.moduleGraph.getModuleById(`\0${id}`);
+      if (module) {
+        server?.moduleGraph.invalidateModule(module);
       }
     },
 
     resolveId(id) {
-      const normalized = id.startsWith('/') ? id.slice(1) : id;
-
-      if (normalized.startsWith(VIRTUAL_PREFIX)) {
-        // normalized: "virtual:client-entry" or "virtual:client-entry/login"
-        const route = normalized.slice(VIRTUAL_PREFIX.length); // "" or "/login"
-        // Important: give it a .tsx extension so vite-plugin-solid runs
-        const virtualTsxId =
-          RESOLVED_PREFIX + (route || '/').replace(/\//g, '_') + '.tsx';
-        return virtualTsxId;
+      if (id.startsWith(PUBLIC_PREFIX)) {
+        return `\0${id}`;
       }
     },
 
-    load(id) {
-      if (!id.startsWith(RESOLVED_PREFIX)) return;
-
-      // Strip prefix + ".tsx"
-      const rest = id.slice(RESOLVED_PREFIX.length); // e.g. "_ .tsx" or "_login.tsx"
-      const routeKey = rest.replace(/\.tsx$/, '').replace(/^_/, '');
-      const route = routeKey === '' ? '/' : '/' + routeKey;
-
-      const islands = islandsByRoute.get(route);
-      const modules = modulesByRoute.get(route) ?? [];
-
-      console.log('load', id, route);
-
-      if (!islands || islands.length === 0) {
-        return `// No islands for route: ${route}`;
+    load(internalId) {
+      if (!internalId.startsWith(INTERNAL_PREFIX)) {
+        return;
       }
+
+      const id = internalId.slice(1); // remove the \0 prefix
+      const islands = islandsByRoute.get(id) ?? [];
+      const modules = modulesByRoute.get(id) ?? [];
 
       return generateClientEntry({
         islands,
