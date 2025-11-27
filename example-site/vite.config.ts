@@ -34,7 +34,6 @@ export default defineConfig(({ mode }) => {
         rollupOptions: {
           input: glob.sync('.build/generated/client/entry-*.tsx'),
         },
-        minify: import.meta.env.PROD,
       },
     };
   } else if (mode === 'development') {
