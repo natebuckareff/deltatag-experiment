@@ -1,12 +1,10 @@
-// TODO: rename vite-plugin-virtual-module
-
 import type { Plugin, ViteDevServer } from 'vite';
-import type { IslandEntry } from '../lib/island';
+import type { IslandEntry } from '../lib/island.tsx';
 import { generateClientEntry } from './client-entry.ts';
 import { getEntryName } from './project-directory.ts';
 import type { RouteMatch } from './routes.ts';
 
-interface VirtualClientEntriesPlugin extends Plugin {
+interface VirtualModulePlugin extends Plugin {
   setRoute(
     match: RouteMatch,
     islands: IslandEntry[],
@@ -24,14 +22,14 @@ function getVirtualModuleId(match: RouteMatch): string {
   return `/$site/${entry}.tsx`;
 }
 
-export function virtualClientEntriesPlugin(): VirtualClientEntriesPlugin {
+export function createVirtualModulePlugin(): VirtualModulePlugin {
   let server: ViteDevServer | undefined;
 
   const islandsByRoute = new Map<string, IslandEntry[]>();
   const modulesByRoute = new Map<string, string[]>();
 
   return {
-    name: 'virtual-client-entries',
+    name: 'virtual-module',
 
     configureServer(s) {
       server = s;

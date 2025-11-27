@@ -5,13 +5,13 @@ import { type Connect, createServer as createViteServer } from 'vite';
 import { ProjectDirectory } from './project-directory.ts';
 import type { PageModule } from './render.tsx';
 import { findMatchingRoute, findRoutes, isNodeRoute } from './routes.ts';
-import { virtualClientEntriesPlugin } from './vite-plugin-virtual-client.ts';
+import { createVirtualModulePlugin } from './vite-plugin-virtual-module.ts';
 
 async function startServer() {
   const projectDir = ProjectDirectory.fromCwd();
   const routes = projectDir.readRoutes();
 
-  const virtualClientPlugin = virtualClientEntriesPlugin();
+  const virtualClientPlugin = createVirtualModulePlugin();
 
   const vite = await createViteServer({
     mode: 'development',
