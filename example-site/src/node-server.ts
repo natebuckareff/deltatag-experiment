@@ -58,10 +58,12 @@ server.on('stream', async (stream, headers) => {
       return;
     }
 
-    const [, route] = findMatchingRoute(manifest.routes, requestUrl);
-    const template = route ? manifest.templates[route.template] : undefined;
+    const match = findMatchingRoute(manifest.routes, requestUrl);
+    const template = match?.route
+      ? manifest.templates[match.route.template]
+      : undefined;
 
-    if (!route || !template) {
+    if (!match || !template) {
       stream.respond({
         'content-type': 'text/plain',
         ':status': '404',
@@ -100,7 +102,7 @@ server.on('stream', async (stream, headers) => {
     await new Promise(r => setTimeout(r, 1000));
 
     let html = fs.readFileSync(
-      path.join(outputDir, 'templates', route.template),
+      path.join(outputDir, 'templates', match.route.template),
       'utf-8',
     );
 
