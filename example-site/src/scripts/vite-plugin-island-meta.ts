@@ -20,7 +20,6 @@ interface ImportInfo {
 interface CollectedImports {
   named: Map<string, ImportInfo>;
   namespaces: Map<string, string>;
-  hasIsland: boolean;
   lastImportEnd: number | null;
 }
 
@@ -110,7 +109,6 @@ function jsxNameToString(name: JSXElementName): string {
 function collectImports(program: Program, id: string): CollectedImports {
   const named = new Map<string, ImportInfo>();
   const namespaces = new Map<string, string>();
-  let hasIsland = false;
   let lastImportEnd: number | null = null;
 
   for (const node of program.body) {
@@ -132,9 +130,6 @@ function collectImports(program: Program, id: string): CollectedImports {
           file: normalizedPath,
           exportName,
         });
-        if (spec.local.name === 'Island') {
-          hasIsland = true;
-        }
       } else if (spec.type === 'ImportDefaultSpecifier') {
         named.set(spec.local.name, {
           file: normalizedPath,
@@ -146,7 +141,7 @@ function collectImports(program: Program, id: string): CollectedImports {
     }
   }
 
-  return { named, namespaces, hasIsland, lastImportEnd };
+  return { named, namespaces, lastImportEnd };
 }
 
 function resolveComponentImport(
@@ -242,7 +237,7 @@ function insertIslandImport(
   return {
     start: insertAfter ?? 0,
     end: insertAfter ?? 0,
-    content: `import { Island } from '${relative}';\n`,
+    content: `import { Island as __Island } from '${relative}';\n`,
   };
 }
 
@@ -293,10 +288,35 @@ export function islandMetaPlugin(): Plugin {
         },
       }).visit(parsed.program as Program);
 
-      const replacements: Replacement[] = [];
-      let needsIslandImport = !imports.hasIsland && clientElements.length > 0;
+      const sortedClientElements = [...clientElements].sort(
+        (a, b) => a.element.start - b.element.start,
+      );
+      const filteredClientElements: ClientDirectiveMatch[] = [];
+      for (const match of sortedClientElements) {
+        const parent = filteredClientElements.find(
+          candidate =>
+            match.element.start >= candidate.element.start &&
+            match.element.end <= candidate.element.end,
+        );
+        if (parent) {
+          this.warn(
+            `[island-meta] nested client directive found for ${jsxNameToString(
+              match.element.openingElement.name,
+            )} inside ${jsxNameToString(
+              parent.element.openingElement.name,
+            )} in ${id}; skipping inner instance to avoid overlapping transforms`,
+          );
+          continue;
+        }
+        filteredClientElements.push(match);
+      }
 
-      for (const { element, attributes } of clientElements) {
+      const replacements: Replacement[] = [];
+      const hasInternalIslandImport = imports.named.has('__Island');
+      let needsIslandImport =
+        !hasInternalIslandImport && filteredClientElements.length > 0;
+
+      for (const { element, attributes } of filteredClientElements) {
         const name = element.openingElement.name;
         if (isDomLikeName(name)) {
           continue;
@@ -343,7 +363,7 @@ export function islandMetaPlugin(): Plugin {
         const meta = `__meta={{ component: "${jsxNameToString(
           name,
         )}", file: "${componentImport.file}", exportName: "${componentImport.exportName}" }}`;
-        const replacement = `<Island id="${islandId}" ${meta}>${sanitized}</Island>`;
+        const replacement = `<__Island id="${islandId}" ${meta}>${sanitized}</__Island>`;
 
         replacements.push({
           start: element.start,
