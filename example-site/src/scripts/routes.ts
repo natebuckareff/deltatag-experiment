@@ -1,3 +1,5 @@
+import { findMatchingRouteGeneric } from './find-matching-route.ts';
+
 export type Route = NodeRoute | LeafRoute;
 
 export interface NodeRoute {
@@ -19,4 +21,11 @@ export interface RoutePath {
 
 export function isNodeRoute(route: Route): route is NodeRoute {
   return 'children' in route;
+}
+
+export function findMatchingRoute(
+  route: NodeRoute,
+  pathname: string,
+): [NodeRoute[], Route | undefined] {
+  return findMatchingRouteGeneric(route, pathname);
 }

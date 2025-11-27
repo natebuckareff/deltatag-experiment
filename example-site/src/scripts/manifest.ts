@@ -1,3 +1,4 @@
+import { findMatchingRouteGeneric } from './find-matching-route.ts';
 import type { ViteManifest, ViteManifestChunk } from './project-directory.ts';
 import { getTemplateName, ProjectDirectory } from './project-directory.ts';
 import type { NodeRoute, Route } from './routes.ts';
@@ -36,36 +37,7 @@ export function findMatchingRoute(
   route: ManifestNodeRoute,
   pathname: string,
 ): [ManifestNodeRoute[], ManifestRoute | undefined] {
-  const paths = pathname.split('/').filter(Boolean);
-
-  let current: ManifestNodeRoute = route;
-  const ancestors: ManifestNodeRoute[] = [];
-
-  while (true) {
-    const path = paths.shift();
-
-    if (!path) {
-      return [ancestors, current];
-    }
-
-    const child = current.children.find(c => c.path.slice(1) === path);
-
-    if (!child) {
-      return [ancestors, undefined];
-    }
-
-    if (!('children' in child)) {
-      if (paths.length > 0) {
-        return [ancestors, undefined];
-      } else {
-        ancestors.push(current);
-        return [ancestors, child];
-      }
-    }
-
-    ancestors.push(current);
-    current = child;
-  }
+  return findMatchingRouteGeneric<ManifestRoute>(route, pathname);
 }
 
 export function buildManifest(projectDir: ProjectDirectory): Manifest {

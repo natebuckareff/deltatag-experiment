@@ -1,5 +1,5 @@
 import type { JSX } from 'solid-js';
-import { Hydration } from 'solid-js/web';
+import { renderToString } from 'solid-js/web';
 
 export interface IslandProps {
   id?: string;
@@ -26,8 +26,8 @@ export function resetIslandRegistry() {
   islandRegistry.clear();
 }
 
-export function readIslandRegistry(): MapIterator<[string, IslandEntry]> {
-  return islandRegistry.entries();
+export function readIslandRegistry(): MapIterator<IslandEntry> {
+  return islandRegistry.values();
 }
 
 export function Island(props: IslandProps) {
@@ -36,10 +36,8 @@ export function Island(props: IslandProps) {
     throw Error('missing island id');
   }
   const entry = { ...internalProps.__meta, id: props.id };
-  islandRegistry.set(internalProps.__meta.file, entry);
-  return (
-    <div id={props.id}>
-      <Hydration>{props.children}</Hydration>
-    </div>
-  );
+  islandRegistry.set(props.id, entry);
+  const Component = () => props.children;
+  const html = renderToString(Component, { renderId: props.id });
+  return <div id={props.id} innerHTML={html} />;
 }

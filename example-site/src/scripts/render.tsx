@@ -20,7 +20,7 @@ export interface RenderParams {
 
 export interface RenderResult {
   html: string;
-  islands: { file: string; entry: IslandEntry }[];
+  islands: IslandEntry[];
 }
 
 export function renderToHtmlAndIslands(params: RenderParams): RenderResult {
@@ -28,8 +28,7 @@ export function renderToHtmlAndIslands(params: RenderParams): RenderResult {
 
   const Component = getComposedComponents(params.layouts, params.page);
   const html = `<!doctype html>${renderToString(Component)}`;
-  const entries = Array.from(readIslandRegistry());
-  const islands = entries.map(([file, entry]) => ({ file, entry }));
+  const islands = Array.from(readIslandRegistry());
 
   return { html, islands };
 }

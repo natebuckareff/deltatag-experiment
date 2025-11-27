@@ -48,8 +48,8 @@ export class ProjectDirectory {
     this.projectRoot = projectRoot;
   }
 
-  static fromCwd(): ProjectDirectory {
-    let current = process.cwd();
+  static fromDir(dir: string): ProjectDirectory {
+    let current = dir;
     while (true) {
       const packageJson = path.join(current, 'package.json');
       if (fs.existsSync(packageJson)) {
@@ -62,8 +62,9 @@ export class ProjectDirectory {
     }
   }
 
-  static fromPath(projectPath: string): ProjectDirectory {
-    return new ProjectDirectory(path.normalize(projectPath));
+  static fromCwd(): ProjectDirectory {
+    const cwd = process.cwd();
+    return ProjectDirectory.fromDir(path.normalize(cwd));
   }
 
   relative(to: string): string {

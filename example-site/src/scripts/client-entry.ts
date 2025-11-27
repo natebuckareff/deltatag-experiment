@@ -1,7 +1,7 @@
 import { IslandEntry } from '../lib/island';
 
 export function generateClientEntry(
-  islands: { file: string; entry: IslandEntry }[],
+  islands: IslandEntry[],
   resolveImportPath: (file: string, index: number) => string,
 ): string {
   function* codegen() {
@@ -13,23 +13,23 @@ export function generateClientEntry(
 
     const hydrations: { alias: string; id: string }[] = [];
 
-    for (const { file, entry } of islands) {
-      const importPath = resolveImportPath(file, importCount++);
+    for (const island of islands) {
+      const importPath = resolveImportPath(island.file, importCount++);
       const importFrom = JSON.stringify(importPath);
       const alias = `Island${importCount}`;
 
-      yield entry.exportName === 'default'
+      yield island.exportName === 'default'
         ? `import ${alias} from ${importFrom};`
-        : `import { ${entry.exportName} as ${alias} } from ${importFrom};`;
+        : `import { ${island.exportName} as ${alias} } from ${importFrom};`;
 
-      const id = JSON.stringify(entry.id);
+      const id = JSON.stringify(island.id);
       hydrations.push({ alias, id });
     }
 
     yield `\n\n`;
 
     for (const { alias, id } of hydrations) {
-      yield `hydrate(() => <${alias} />, document.getElementById(${id}));`;
+      yield `hydrate(() => <${alias} />, document.getElementById(${id}), { renderId: ${id} });`;
     }
   }
 

@@ -29,8 +29,8 @@ export function build(params: RenderParams) {
 
     console.log(`  • generated ${projectDir.relative(entryPath)}`);
 
-    for (const { entry } of islands) {
-      const { component, exportName } = entry;
+    for (const island of islands) {
+      const { component, exportName } = island;
       const name = exportName === 'default' ? component : exportName;
       console.log(`    ◦ ${name}`);
     }
