@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { glob } from 'glob';
-import type { NodeRoute, RoutePath } from './routes.ts';
+import type { NodeRoute, RouteMatch } from './routes.ts';
+import { getRouteMatchPath } from './routes.ts';
 
 /*
   .build
@@ -97,25 +98,25 @@ export class ProjectDirectory {
     return path.join(this.getGeneratedDir(), 'client');
   }
 
-  getServerEntryPath(kebabOrRoutePath: string | RoutePath): string {
-    const name = getEntryName(kebabOrRoutePath);
+  getServerEntryPath(kebabOrMatch: string | RouteMatch): string {
+    const name = getEntryName(kebabOrMatch);
     const filename = name + '.tsx';
     return path.join(this.getServerEntriesDir(), filename);
   }
 
-  getServerManifestKey(kebabOrRoutePath: string | RoutePath): string {
-    const entryPath = this.getServerEntryPath(kebabOrRoutePath);
+  getServerManifestKey(kebabOrMatch: string | RouteMatch): string {
+    const entryPath = this.getServerEntryPath(kebabOrMatch);
     return path.relative(this.projectRoot, entryPath);
   }
 
-  getClientEntryPath(kebabOrRoutePath: string | RoutePath): string {
-    const name = getEntryName(kebabOrRoutePath);
+  getClientEntryPath(kebabOrMatch: string | RouteMatch): string {
+    const name = getEntryName(kebabOrMatch);
     const filename = name + '.tsx';
     return path.join(this.getClientEntriesDir(), filename);
   }
 
-  getClientManifestKey(kebabOrRoutePath: string | RoutePath): string {
-    const entryPath = this.getClientEntryPath(kebabOrRoutePath);
+  getClientManifestKey(kebabOrMatch: string | RouteMatch): string {
+    const entryPath = this.getClientEntryPath(kebabOrMatch);
     return path.relative(this.projectRoot, entryPath);
   }
 
@@ -181,33 +182,29 @@ export class ProjectDirectory {
     return path.join(this.getOutputDir(), 'templates');
   }
 
-  getTemplatePath(kebabOrRoutePath: string | RoutePath): string {
-    const name = getTemplateName(kebabOrRoutePath);
+  getTemplatePath(kebabOrMatch: string | RouteMatch): string {
+    const name = getTemplateName(kebabOrMatch);
     const filename = name + '.html';
     return path.join(this.getOutputTemplateDir(), filename);
   }
 }
 
-export function getEntryName(kebabOrRoutePath: string | RoutePath): string {
+export function getEntryName(kebabOrMatch: string | RouteMatch): string {
   const routeKebab =
-    typeof kebabOrRoutePath === 'string'
-      ? kebabOrRoutePath
-      : getRouteKebab(kebabOrRoutePath);
+    typeof kebabOrMatch === 'string'
+      ? kebabOrMatch
+      : getRouteKebab(kebabOrMatch);
   return `entry-${routeKebab || 'index'}`;
 }
 
-export function getTemplateName(kebabOrRoutePath: string | RoutePath): string {
+export function getTemplateName(kebabOrMatch: string | RouteMatch): string {
   const routeKebab =
-    typeof kebabOrRoutePath === 'string'
-      ? kebabOrRoutePath
-      : getRouteKebab(kebabOrRoutePath);
+    typeof kebabOrMatch === 'string'
+      ? kebabOrMatch
+      : getRouteKebab(kebabOrMatch);
   return routeKebab || 'index';
 }
 
-function getRouteKebab(routePath: RoutePath): string {
-  const { ancestors, route } = routePath;
-  return [...ancestors.map(a => a.path), route.path]
-    .map(p => p.slice(1))
-    .filter(Boolean)
-    .join('-');
+function getRouteKebab(match: RouteMatch): string {
+  return getRouteMatchPath(match).join('-');
 }

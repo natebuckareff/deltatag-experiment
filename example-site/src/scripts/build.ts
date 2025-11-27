@@ -7,7 +7,7 @@ import { RenderParams, renderToHtmlAndIslands } from './render';
 export function build(params: RenderParams) {
   const projectDir = ProjectDirectory.fromCwd();
   const { html, islands } = renderToHtmlAndIslands(params);
-  const templatePath = projectDir.getTemplatePath(params.path);
+  const templatePath = projectDir.getTemplatePath(params.match);
 
   fs.mkdirSync(path.dirname(templatePath), { recursive: true });
   fs.writeFileSync(templatePath, html);
@@ -15,7 +15,7 @@ export function build(params: RenderParams) {
   console.log(`✓ rendered ${projectDir.relative(templatePath)}`);
 
   if (islands.length > 0) {
-    const entryPath = projectDir.getClientEntryPath(params.path);
+    const entryPath = projectDir.getClientEntryPath(params.match);
     const entryDir = path.dirname(entryPath);
 
     const code = generateClientEntry(islands, file => {

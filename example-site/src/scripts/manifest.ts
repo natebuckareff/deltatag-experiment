@@ -36,7 +36,7 @@ export interface ManifestLayout {
 export function findMatchingRoute(
   route: ManifestNodeRoute,
   pathname: string,
-): [ManifestNodeRoute[], ManifestRoute | undefined] {
+): { ancestors: ManifestNodeRoute[]; route: ManifestRoute } | undefined {
   return findMatchingRouteGeneric<ManifestRoute>(route, pathname);
 }
 

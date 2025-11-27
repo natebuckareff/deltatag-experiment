@@ -58,12 +58,6 @@ function generateServerEntries(route: NodeRoute) {
     const pageImportPath = path.relative(serverEntriesDir, route.index);
     imports.push(`import Page from ${JSON.stringify(pageImportPath)};`);
 
-    const allPaths = [...ancestors.map(a => a.path), route.path]
-      .map(p => p.slice(1))
-      .filter(Boolean);
-
-    const fullPath = `/${allPaths.join('/')}`;
-
     const runner: string[] = [];
 
     runner.push(`build({`);

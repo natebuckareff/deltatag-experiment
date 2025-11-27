@@ -7,7 +7,7 @@ export type AnyNodeRoute<R extends AnyRoute> = R & { children: R[] };
 export function findMatchingRouteGeneric<R extends AnyRoute>(
   root: AnyNodeRoute<R>,
   pathname: string,
-): [AnyNodeRoute<R>[], R | undefined] {
+): { ancestors: AnyNodeRoute<R>[]; route: R } | undefined {
   const paths = pathname.split('/').filter(Boolean);
 
   let current: AnyNodeRoute<R> = root;
@@ -17,21 +17,21 @@ export function findMatchingRouteGeneric<R extends AnyRoute>(
     const segment = paths.shift();
 
     if (!segment) {
-      return [ancestors, current];
+      return { ancestors, route: current };
     }
 
     const child = current.children.find(c => c.path.slice(1) === segment);
 
     if (!child) {
-      return [ancestors, undefined];
+      return;
     }
 
     if (!('children' in child)) {
       if (paths.length > 0) {
-        return [ancestors, undefined];
+        return;
       } else {
         ancestors.push(current);
-        return [ancestors, child];
+        return { ancestors, route: child };
       }
     }
 

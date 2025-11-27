@@ -5,7 +5,7 @@ import {
   readIslandRegistry,
   resetIslandRegistry,
 } from '../lib/island';
-import { RoutePath } from './routes';
+import { RouteMatch } from './routes';
 
 export interface PageModule {
   file: string;
@@ -13,7 +13,7 @@ export interface PageModule {
 }
 
 export interface RenderParams {
-  path: RoutePath;
+  match: RouteMatch;
   layouts: PageModule[];
   page: PageModule;
 }
