@@ -1,26 +1,15 @@
 {
   "path": "/",
-  "layout": "src/pages/root.page.tsx",
-  "index": "src/pages/landing.page.tsx",
+  "layout": "src/pages/root.tsx",
+  "index": "src/pages/home.tsx",
   "children": [
     {
-      "path": "/login",
-      "index": "src/pages/login.page.tsx"
+      "path": "/foo",
+      "index": "src/pages/foo.tsx"
     },
     {
-      "path": "/dashboard",
-      "layout": "src/pages/dash/dashboard-wrapper.page.tsx",
-      "index": "src/pages/dash/dashboard.page.tsx",
-      "children": [
-        {
-          "path": "/users",
-          "index": "src/pages/dash/dashboard-users.page.tsx"
-        },
-        {
-          "path": "/events",
-          "index": "src/pages/dash/dashboard-events.page.tsx"
-        }
-      ]
+      "path": "/bar",
+      "index": "src/pages/bar.tsx"
     }
   ]
 }

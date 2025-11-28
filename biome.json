@@ -15,7 +15,16 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "nursery": {
+        "useSortedClasses": {
+          "level": "error",
+          "fix": "safe",
+          "options": {
+            "attributes": ["class"]
+          }
+        }
+      }
     },
     "includes": ["src/**/*.ts", "!src/**/*.test.ts", "ui/src/**/*.tsx"]
   },
