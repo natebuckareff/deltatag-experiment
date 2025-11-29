@@ -3,7 +3,7 @@ import { A, Route, Router } from '@solidjs/router';
 export function TinyApp() {
   return (
     <div class="border border-red-500 p-4">
-      <Router base="/bar" explicitLinks>
+      <Router base="/bar">
         <Route path="/" component={TinyHome} />
         <Route path="/foo" component={TinyFoo} />
       </Router>
