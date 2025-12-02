@@ -1,35 +1,22 @@
 import { exhaustive, print } from '../util';
-import { FileTree, readFileTree } from './file-tree';
+import { FileTree, FileTreeDir, readFileTree } from './file-tree';
 
-export type RouteConfig =
-  | RouteConfigNode
-  // | RouteConfigSlot
-  // | RouteConfigIntercept
-  | RouteConfigPage;
+export type RouteConfig = RouteConfigNode | RouteConfigPage;
 
-interface RouteConfigNode {
-  path?: string;
+export interface RouteConfigNode {
+  intercept?: RouteConfigInterceptType;
+  path: string;
   param?: string;
   layout?: string;
   children: RouteConfig[];
 }
 
-// interface RouteConfigSlot {
-//   slot: string;
-//   layout?: string;
-//   children: RouteConfig[];
-// }
-
-// interface RouteConfigIntercept {
-//   base: 'current-level' | '1-level' | '2-levels' | 'root-level';
-//   layout?: string;
-//   children: RouteConfig[];
-// }
-
-interface RouteConfigPage {
+export interface RouteConfigPage {
+  intercept?: RouteConfigInterceptType;
   path: string;
   param?: string;
   file: string;
+  script?: boolean;
 }
 
 type ParsedRouteName =
@@ -39,12 +26,15 @@ type ParsedRouteName =
   | { kind: 'fallback'; name: string; tree: FileTree };
 
 type RouteConfigParamType = 'required' | 'optional' | 'catch-all';
+type RouteConfigInterceptType = '.' | '..' | '../..' | '...';
 
 interface ParsedSegmentName {
   kind: 'segment';
   name: string;
   param?: RouteConfigParamType;
+  intercept?: RouteConfigInterceptType;
   tree: FileTree;
+  extension?: string;
 }
 
 interface RouteConfigParam {
@@ -52,23 +42,33 @@ interface RouteConfigParam {
   name: string;
 }
 
-const REQUIRED_PARAM_REGEX = /^\[([^\.]+)\](\.[^\.]*)?$/;
-const OPTIONAL_PARAM_REGEX = /^\[\[([^\.]+)\]\](\.[^\.]*)?$/;
-const CATCH_ALL_REGEX = /^\[\.\.\.([^\.]+)\](\.[^\.]*)?$/;
-const ESCAPED_REGEX = /^([^()]+)\(([^)]+)\)(\.[^\.]*)?$/;
+const SEGMENT_REGEX = /^([^.()]+)(\..*)?$/;
+const GROUP_REGEX = /^\(([^\.]+)\)(\..*)?$/;
+const REQUIRED_PARAM_REGEX = /^\[([^\.]+)\](\..*)?$/;
+const OPTIONAL_PARAM_REGEX = /^\[\[([^\.]+)\]\](\..*)?$/;
+const CATCH_ALL_REGEX = /^\[\.\.\.([^\.]+)\](\..*)?$/;
+const ESCAPED_REGEX = /^([^()]+)\(([^)]+)\)(\..*)?$/;
+const INTERCEPT_REGEX =
+  /^(\(\.\)|\(\.\.\)|\(\.\.\)\(\.\.\)|\(\.\.\.\))([^()]+)$/;
 
-export async function getRouteConfig(
+export async function readRouteConfig(
   dirPath: string,
 ): Promise<RouteConfigNode> {
   const tree = await readFileTree(dirPath);
-  return {
-    path: '/',
-    children: tree.children.map(child => getRouteConfigFromFileTree(child)),
-  } satisfies RouteConfigNode;
+  return getRouteConfig(tree);
 }
 
-function getRouteConfigFromFileTree(tree: FileTree): RouteConfig {
-  const routeName = parseRouteName(tree);
+export async function getRouteConfig(
+  tree: FileTreeDir,
+): Promise<RouteConfigNode> {
+  return getRouteConfigFromDirTree(tree, undefined, true);
+}
+
+function getRouteConfigFromFileTree(
+  tree: FileTree,
+  routeName?: ParsedRouteName,
+): RouteConfig {
+  routeName ??= parseRouteName(tree);
 
   if (routeName.tree.kind === 'file') {
     const path = getRoutePath(routeName);
@@ -78,73 +78,130 @@ function getRouteConfigFromFileTree(tree: FileTree): RouteConfig {
       throw Error('invalid route path');
     }
 
+    const intercept =
+      routeName.kind === 'segment' ? routeName.intercept : undefined;
+
+    const extension =
+      routeName.kind === 'segment' ? routeName.extension : undefined;
+
+    const script =
+      extension === '.script.ts' || extension === '.script.tsx'
+        ? true
+        : undefined;
+
     return {
+      intercept,
       path,
       param: getParamName(routeName),
       file: tree.src,
+      script,
     };
   } else if (routeName.tree.kind === 'dir') {
-    // find the index route for segment dirs
-    let indexTree: FileTree | undefined;
-    if (routeName.kind === 'segment') {
-      for (const child of routeName.tree.children) {
-        if (isIndex(child)) {
-          indexTree = child;
-          break;
-        }
-      }
-    }
-
-    let layout: string | undefined;
-
-    const children: RouteConfig[] = [];
-
-    if (indexTree) {
-      children.push({
-        path: '/',
-        file: indexTree.src,
-      } satisfies RouteConfigPage);
-    }
-
-    // parse the children, skipping the index
-    for (const child of routeName.tree.children) {
-      if (indexTree?.filename === child.filename) {
-        continue;
-      }
-
-      if (isLayout(child)) {
-        layout = child.src;
-        continue;
-      }
-
-      children.push(getRouteConfigFromFileTree(child));
-    }
-
-    if (routeName.kind === 'segment') {
-      return {
-        path: getRoutePath(routeName),
-        param: getParamName(routeName),
-        layout,
-        children,
-      } satisfies RouteConfigNode;
-    } else if (routeName.kind === 'group') {
-      return {
-        layout,
-        children,
-      } satisfies RouteConfigNode;
-    } else if (routeName.kind === 'slot') {
-      return {
-        path: getRoutePath(routeName),
-        layout,
-        children,
-      } satisfies RouteConfigNode;
-    } else if (routeName.kind === 'fallback') {
-      throw Error('fallback routes must not be directories');
-    } else {
-      exhaustive(routeName);
-    }
+    return getRouteConfigFromDirTree(routeName.tree, routeName, false);
   } else {
     exhaustive(routeName.tree);
+  }
+}
+
+function getRouteConfigFromDirTree(
+  tree: FileTreeDir,
+  routeName: ParsedRouteName | undefined,
+  isRoot: boolean,
+): RouteConfigNode {
+  routeName ??= parseRouteName(tree);
+
+  // find the index route for segment dirs
+  let indexTree: FileTree | undefined;
+  if (routeName.kind === 'segment') {
+    for (const child of tree.children) {
+      if (isIndex(child)) {
+        if (indexTree) {
+          throw Error('multiple index routes');
+        }
+        indexTree = child;
+      }
+    }
+  }
+
+  let layout: string | undefined;
+
+  const children: RouteConfig[] = [];
+
+  if (indexTree) {
+    children.push({
+      path: '/',
+      file: indexTree.src,
+    } satisfies RouteConfigPage);
+  }
+
+  // parse the children, skipping the index
+  for (const child of tree.children) {
+    if (indexTree?.filename === child.filename) {
+      continue;
+    }
+
+    if (isLayout(child)) {
+      if (layout) {
+        throw Error('multiple layouts');
+      }
+      layout = child.src;
+      continue;
+    }
+
+    // need to recursive into any child group directories and collapse them so
+    // they're under the same route
+    const childRouteName = parseRouteName(child);
+    const collapsedChildren = [...getCollapsedGroups(child, childRouteName)];
+
+    children.push(
+      ...collapsedChildren.map(({ tree, routeName }) =>
+        getRouteConfigFromFileTree(tree, routeName),
+      ),
+    );
+  }
+
+  const path = isRoot ? '/' : getRoutePath(routeName);
+
+  if (!path) {
+    throw Error('invalid route path');
+  }
+
+  if (routeName.kind === 'segment') {
+    return {
+      intercept: routeName.intercept,
+      path,
+      param: getParamName(routeName),
+      layout,
+      children,
+    } satisfies RouteConfigNode;
+  } else if (routeName.kind === 'group') {
+    // all directory groups are collapsed before this
+    throw Error('unexpected group');
+  } else if (routeName.kind === 'slot') {
+    return {
+      path,
+      layout,
+      children,
+    } satisfies RouteConfigNode;
+  } else if (routeName.kind === 'fallback') {
+    throw Error('fallback routes must not be directories');
+  } else {
+    exhaustive(routeName);
+  }
+}
+
+function* getCollapsedGroups(
+  tree: FileTree,
+  routeName: ParsedRouteName,
+): Iterable<{ tree: FileTree; routeName: ParsedRouteName }> {
+  if (tree.kind !== 'dir' || routeName.kind !== 'group') {
+    yield { tree, routeName };
+    return;
+  }
+
+  for (const child of tree.children) {
+    const childRouteName = parseRouteName(child);
+    yield* getCollapsedGroups(child, childRouteName);
   }
 }
 
@@ -164,7 +221,7 @@ function isIndex(child: FileTree): boolean {
       return true;
     }
   } else if (childRouteName.kind === 'group') {
-    return false;
+    return true;
   }
 
   return false;
@@ -246,27 +303,39 @@ function parseRouteName(tree: FileTree): ParsedRouteName {
     };
   }
 
-  const param = parseParam(tree.filename);
-  const escaped = parseEscapedRoute(tree.filename);
+  const intercept = parseIntercept(tree.filename);
+  const filename = intercept?.filename ?? tree.filename;
 
-  const name = param
-    ? param.name
-    : (escaped?.segment ?? parseSegmentName(tree.filename));
+  const param = parseParam(filename);
+  const escaped = parseEscapedRoute(filename);
+  const segmentName = parseSegmentName(filename);
+  const extension = segmentName?.extension;
+
+  const name = param ? param.name : (escaped?.segment ?? segmentName?.name);
+
+  if (!name) {
+    throw Error(`invalid segment name: ${filename}`);
+  }
 
   return {
     kind: 'segment',
-    name,
+    name: name,
     param: param?.type,
+    intercept: intercept?.type,
     tree,
+    extension,
   };
 }
 
-function parseSegmentName(filename: string): string {
-  const dot = filename.lastIndexOf('.');
-  if (dot === -1) {
-    return filename;
+function parseSegmentName(
+  filename: string,
+): { name: string; extension: string } | undefined {
+  const match = filename.match(SEGMENT_REGEX);
+  if (match) {
+    const name = match[1]!;
+    const extension = match[2]!;
+    return { name, extension };
   }
-  return filename.slice(0, dot);
 }
 
 function parseEscapedRoute(
@@ -282,8 +351,9 @@ function parseEscapedRoute(
 }
 
 function parseGroupName(filename: string): string | undefined {
-  if (filename.startsWith('(') && filename.endsWith(')')) {
-    return filename.slice(1, -1);
+  const match = filename.match(GROUP_REGEX);
+  if (match) {
+    return match[1]!;
   }
 }
 
@@ -296,6 +366,37 @@ function parseSlotName(filename: string): string | undefined {
 function parseFallbackName(filename: string): string | undefined {
   if (filename.startsWith('*')) {
     return filename.slice(1);
+  }
+}
+
+function parseIntercept(
+  filename: string,
+): { type: RouteConfigInterceptType; filename: string } | undefined {
+  const match = filename.match(INTERCEPT_REGEX);
+  if (match) {
+    return {
+      type: parseInterceptType(match[1]!),
+      filename: match[2]!,
+    };
+  }
+}
+
+function parseInterceptType(type: string): RouteConfigInterceptType {
+  switch (type) {
+    case '(.)':
+      return '.';
+
+    case '(..)':
+      return '..';
+
+    case '(..)(..)':
+      return '../..';
+
+    case '(...)':
+      return '...';
+
+    default:
+      throw Error(`invalid intercept type: ${type}`);
   }
 }
 
