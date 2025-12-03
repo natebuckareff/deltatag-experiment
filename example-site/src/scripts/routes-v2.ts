@@ -358,8 +358,9 @@ function parseGroupName(filename: string): string | undefined {
 }
 
 function parseSlotName(filename: string): string | undefined {
-  if (filename.startsWith('@')) {
-    return filename.slice(1);
+  const match = filename.match(SLOT_REGEX);
+  if (match) {
+    return match[1]!;
   }
 }
 
