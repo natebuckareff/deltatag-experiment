@@ -1,4 +1,4 @@
-import { exhaustive, print } from '../util';
+import { exhaustive } from '../util';
 import { FileTree, FileTreeDir, readFileTree } from './file-tree';
 
 export type RouteConfig = RouteConfigNode | RouteConfigPage;
