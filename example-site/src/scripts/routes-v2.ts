@@ -19,6 +19,8 @@ export interface RouteConfigPage {
   script?: boolean;
 }
 
+export type RouteConfigInterceptType = '.' | '..' | '../..' | '...';
+
 type ParsedRouteName =
   | ParsedSegmentName
   | { kind: 'group'; name: string; tree: FileTree }
@@ -26,7 +28,6 @@ type ParsedRouteName =
   | { kind: 'fallback'; name: string; tree: FileTree };
 
 type RouteConfigParamType = 'required' | 'optional' | 'catch-all';
-type RouteConfigInterceptType = '.' | '..' | '../..' | '...';
 
 interface ParsedSegmentName {
   kind: 'segment';
@@ -43,13 +44,27 @@ interface RouteConfigParam {
 }
 
 const SEGMENT_REGEX = /^([^.()]+)(\..*)?$/;
-const GROUP_REGEX = /^\(([^\.]+)\)(\..*)?$/;
-const REQUIRED_PARAM_REGEX = /^\[([^\.]+)\](\..*)?$/;
-const OPTIONAL_PARAM_REGEX = /^\[\[([^\.]+)\]\](\..*)?$/;
-const CATCH_ALL_REGEX = /^\[\.\.\.([^\.]+)\](\..*)?$/;
 const ESCAPED_REGEX = /^([^()]+)\(([^)]+)\)(\..*)?$/;
+const GROUP_REGEX = /^\(([^\.]+)\)(\..*)?$/;
+const SLOT_REGEX = /^@([^\.]+)(\..*)?$/;
+const FALLBACK_REGEX = /^\*([^\.]+)(\..*)?$/;
+const OPTIONAL_PARAM_REGEX = /^\[\[([^\.]+)\]\](\..*)?$/;
+const REQUIRED_PARAM_REGEX = /^\[([^\.]+)\](\..*)?$/;
+const CATCH_ALL_REGEX = /^\[\.\.\.([^\.]+)\](\..*)?$/;
 const INTERCEPT_REGEX =
   /^(\(\.\)|\(\.\.\)|\(\.\.\)\(\.\.\)|\(\.\.\.\))([^()]+)$/;
+
+export function isRouteConfigNode(
+  config: RouteConfig,
+): config is RouteConfigNode {
+  return 'children' in config;
+}
+
+export function isRouteConfigPage(
+  config: RouteConfig,
+): config is RouteConfigPage {
+  return 'file' in config;
+}
 
 export async function readRouteConfig(
   dirPath: string,
@@ -365,39 +380,9 @@ function parseSlotName(filename: string): string | undefined {
 }
 
 function parseFallbackName(filename: string): string | undefined {
-  if (filename.startsWith('*')) {
-    return filename.slice(1);
-  }
-}
-
-function parseIntercept(
-  filename: string,
-): { type: RouteConfigInterceptType; filename: string } | undefined {
-  const match = filename.match(INTERCEPT_REGEX);
+  const match = filename.match(FALLBACK_REGEX);
   if (match) {
-    return {
-      type: parseInterceptType(match[1]!),
-      filename: match[2]!,
-    };
-  }
-}
-
-function parseInterceptType(type: string): RouteConfigInterceptType {
-  switch (type) {
-    case '(.)':
-      return '.';
-
-    case '(..)':
-      return '..';
-
-    case '(..)(..)':
-      return '../..';
-
-    case '(...)':
-      return '...';
-
-    default:
-      throw Error(`invalid intercept type: ${type}`);
+    return match[1]!;
   }
 }
 
@@ -442,5 +427,36 @@ function parseCatchAllParamName(
       type: 'catch-all',
       name: match[1]!,
     };
+  }
+}
+
+function parseIntercept(
+  filename: string,
+): { type: RouteConfigInterceptType; filename: string } | undefined {
+  const match = filename.match(INTERCEPT_REGEX);
+  if (match) {
+    return {
+      type: parseInterceptType(match[1]!),
+      filename: match[2]!,
+    };
+  }
+}
+
+function parseInterceptType(type: string): RouteConfigInterceptType {
+  switch (type) {
+    case '(.)':
+      return '.';
+
+    case '(..)':
+      return '..';
+
+    case '(..)(..)':
+      return '../..';
+
+    case '(...)':
+      return '...';
+
+    default:
+      throw Error(`invalid intercept type: ${type}`);
   }
 }
