@@ -8,6 +8,7 @@ export interface RouteConfigNode {
   path: string;
   param?: string;
   layout?: string;
+  scripts?: string[];
   children: RouteConfig[];
 }
 
@@ -16,7 +17,6 @@ export interface RouteConfigPage {
   path: string;
   param?: string;
   file: string;
-  script?: boolean;
 }
 
 export type RouteConfigInterceptType = '.' | '..' | '../..' | '...';
@@ -96,20 +96,11 @@ function getRouteConfigFromFileTree(
     const intercept =
       routeName.kind === 'segment' ? routeName.intercept : undefined;
 
-    const extension =
-      routeName.kind === 'segment' ? routeName.extension : undefined;
-
-    const script =
-      extension === '.script.ts' || extension === '.script.tsx'
-        ? true
-        : undefined;
-
     return {
       intercept,
       path,
       param: getParamName(routeName),
       file: tree.src,
-      script,
     };
   } else if (routeName.tree.kind === 'dir') {
     return getRouteConfigFromDirTree(routeName.tree, routeName, false);
@@ -139,6 +130,7 @@ function getRouteConfigFromDirTree(
   }
 
   let layout: string | undefined;
+  let scripts: string[] | undefined;
 
   const children: RouteConfig[] = [];
 
@@ -161,6 +153,11 @@ function getRouteConfigFromDirTree(
       }
       layout = child.src;
       continue;
+    }
+
+    if (isScript(child)) {
+      scripts ??= [];
+      scripts.push(child.src);
     }
 
     // need to recursive into any child group directories and collapse them so
@@ -187,6 +184,7 @@ function getRouteConfigFromDirTree(
       path,
       param: getParamName(routeName),
       layout,
+      scripts,
       children,
     } satisfies RouteConfigNode;
   } else if (routeName.kind === 'group') {
@@ -247,6 +245,14 @@ function isLayout(tree: FileTree): boolean {
     tree.kind === 'file' &&
     tree.filename.startsWith('_') &&
     !tree.filename.startsWith('__')
+  );
+}
+
+function isScript(tree: FileTree): boolean {
+  return (
+    tree.kind === 'file' &&
+    (tree.filename.endsWith('.script.ts') ||
+      tree.filename.endsWith('.script.tsx'))
   );
 }
 
